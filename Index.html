@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        background-color: #f5f7fa;
+        color: #333;
+      }
+      
+      /* Header */
+      .header {
+        background: #1a73e8;
+        color: white;
+        padding: 16px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .header h1 {
+        font-size: 24px;
+        font-weight: 600;
+      }
+      
+      .header-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      
+      .badge {
+        background: #ea4335;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: bold;
+        margin-left: 8px;
+      }
+      
+      .user-info {
+        font-size: 14px;
+        opacity: 0.9;
+      }
+      
+      /* Main Container */
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      
+      /* Action Bar */
+      .action-bar {
+        background: white;
+        padding: 16px 24px;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      
+      .action-buttons {
+        display: flex;
+        gap: 12px;
+      }
+      
+      .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .btn-primary {
+        background: #1a73e8;
+        color: white;
+      }
+      
+      .btn-primary:hover {
+        background: #1557b0;
+      }
+      
+      .btn-secondary {
+        background: white;
+        color: #5f6368;
+        border: 1px solid #dadce0;
+      }
+      
+      .btn-secondary:hover {
+        background: #f8f9fa;
+      }
+      
+      /* Filters */
+      .filters {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      
+      .filter-label {
+        font-size: 14px;
+        color: #5f6368;
+        font-weight: 500;
+      }
+      
+      select {
+        padding: 8px 32px 8px 12px;
+        border: 1px solid #dadce0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+        cursor: pointer;
+        appearance: none;
+        background-image: url('data:image/svg+xml;charset=UTF-8,%3csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%3e%3cpolyline points="6 9 12 15 18 9"%3e%3c/polyline%3e%3c/svg%3e');
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+        background-size: 16px;
+      }
+      
+      /* Calendar Card */
+      .calendar-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        overflow: hidden;
+      }
+      
+      .calendar-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #e8eaed;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .calendar-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #202124;
+      }
+      
+      .calendar-nav {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .nav-btn {
+        width: 36px;
+        height: 36px;
+        border: 1px solid #dadce0;
+        border-radius: 50%;
+        background: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: #5f6368;
+        transition: all 0.2s;
+      }
+      
+      .nav-btn:hover {
+        background: #f8f9fa;
+        border-color: #5f6368;
+      }
+      
+      /* Calendar Grid */
+      .calendar {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      
+      .calendar th {
+        padding: 16px 8px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: #5f6368;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid #e8eaed;
+      }
+      
+      .calendar td {
+        padding: 0;
+        height: 120px;
+        vertical-align: top;
+        border: 1px solid #e8eaed;
+        background: white;
+        position: relative;
+      }
+      
+      .calendar td.empty {
+        background: #f8f9fa;
+      }
+      
+      .calendar td.today {
+        background: #e8f0fe;
+      }
+      
+      .day-cell {
+        height: 100%;
+        padding: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      
+      .day-cell:hover {
+        background: rgba(0,0,0,0.02);
+      }
+      
+      .day-number {
+        font-size: 14px;
+        font-weight: 500;
+        color: #202124;
+        margin-bottom: 4px;
+      }
+      
+      .today .day-number {
+        display: inline-block;
+        background: #1a73e8;
+        color: white;
+        width: 28px;
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        border-radius: 50%;
+      }
+      
+      /* Post Items */
+      .post-item {
+        padding: 4px 8px;
+        margin: 2px 0;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .post-item:hover {
+        transform: translateX(2px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      
+      .post-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      
+      /* Status Colors */
+      .post-item.Draft {
+        background: #f1f3f4;
+        color: #5f6368;
+        border-left: 3px solid #9aa0a6;
+      }
+      
+      .post-item.Draft .post-dot {
+        background: #9aa0a6;
+      }
+      
+      .post-item.Internal_Review {
+        background: #fef7e0;
+        color: #b06000;
+        border-left: 3px solid #f9ab00;
+      }
+      
+      .post-item.Internal_Review .post-dot {
+        background: #f9ab00;
+      }
+      
+      .post-item.Client_Review {
+        background: #fce8e6;
+        color: #c5221f;
+        border-left: 3px solid #ea4335;
+      }
+      
+      .post-item.Client_Review .post-dot {
+        background: #ea4335;
+      }
+      
+      .post-item.Approved {
+        background: #e6f4ea;
+        color: #137333;
+        border-left: 3px solid #34a853;
+      }
+      
+      .post-item.Approved .post-dot {
+        background: #34a853;
+      }
+      
+      .post-item.Scheduled {
+        background: #e8f0fe;
+        color: #1967d2;
+        border-left: 3px solid #1a73e8;
+      }
+      
+      .post-item.Scheduled .post-dot {
+        background: #1a73e8;
+      }
+      
+      .post-item.Published {
+        background: #e4f7fb;
+        color: #01579b;
+        border-left: 3px solid #039be5;
+      }
+      
+      .post-item.Published .post-dot {
+        background: #039be5;
+      }
+      
+      /* Legend */
+      .legend {
+        padding: 16px 24px;
+        border-top: 1px solid #e8eaed;
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      
+      .legend-label {
+        font-size: 12px;
+        color: #5f6368;
+        font-weight: 500;
+        margin-right: 8px;
+      }
+      
+      .legend-items {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+      }
+      
+      .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      
+      /* Loading State */
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 60px 20px;
+        color: #5f6368;
+      }
+      
+      .loading.active {
+        display: block;
+      }
+      
+      .spinner {
+        border: 3px solid #e8eaed;
+        border-top: 3px solid #1a73e8;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 16px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Responsive */
+      @media (max-width: 768px) {
+        .calendar td {
+          height: 80px;
+        }
+        
+        .action-bar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        
+        .filters {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="header">
+      <h1>📅 Social Media Planner</h1>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="showApprovalDashboard()">
+          📥 My Approvals<span class="badge" id="approval-count" style="display: none;">0</span>
+        </button>
+        <span class="user-info"><?= userName ?> (<?= userRole ?>)</span>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+      <!-- Action Bar -->
+      <div class="action-bar">
+        <div class="action-buttons">
+          <button class="btn btn-primary" onclick="alert('Post creation form coming in next phase!')">
+            ➕ Create Post
+          </button>
+          <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
+            📊 Strategy
+          </button>
+        </div>
+        
+        <div class="filters">
+          <span class="filter-label">Filters:</span>
+          <select id="client-filter" onchange="filterCalendar()">
+            <option value="">All Clients</option>
+          </select>
+          <select id="status-filter" onchange="filterCalendar()">
+            <option value="">All Statuses</option>
+            <option value="Draft">Draft</option>
+            <option value="Internal_Review">Internal Review</option>
+            <option value="Client_Review">Client Review</option>
+            <option value="Approved">Approved</option>
+            <option value="Scheduled">Scheduled</option>
+            <option value="Published">Published</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Calendar Card -->
+      <div class="calendar-card">
+        <div class="calendar-header">
+          <h2 class="calendar-title" id="calendar-title">October 2025</h2>
+          <div class="calendar-nav">
+            <button class="nav-btn" onclick="previousMonth()">‹</button>
+            <button class="nav-btn" onclick="today()">Today</button>
+            <button class="nav-btn" onclick="nextMonth()">›</button>
+          </div>
+        </div>
+        
+        <!-- Loading State -->
+        <div class="loading active" id="loading">
+          <div class="spinner"></div>
+          <p>Loading your content calendar...</p>
+        </div>
+        
+        <!-- Calendar -->
+        <div id="calendar-container" style="display: none;">
+          <table class="calendar" id="calendar-table"></table>
+        </div>
+        
+        <!-- Legend -->
+        <div class="legend">
+          <span class="legend-label">Status:</span>
+          <div class="legend-items">
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #9aa0a6;"></div>
+              <span>Draft</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #f9ab00;"></div>
+              <span>Internal Review</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #ea4335;"></div>
+              <span>Client Review</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #34a853;"></div>
+              <span>Approved</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #1a73e8;"></div>
+              <span>Scheduled</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background: #039be5;"></div>
+              <span>Published</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Global state
+      let currentMonth = new Date().getMonth();
+      let currentYear = new Date().getFullYear();
+      let allPosts = [];
+      let allClients = [];
+      let filteredPosts = [];
+
+      // Initialize on load
+      window.onload = function() {
+        // Check if google.script.run is available (only in deployed Apps Script environment)
+        if (typeof google === 'undefined' || !google.script) {
+          showPreviewMessage();
+          return;
+        }
+        
+        loadCalendarData();
+        loadApprovalCount();
+      };
+
+      // Show message when in preview mode
+      function showPreviewMessage() {
+        document.getElementById('loading').innerHTML = 
+          '<div style="padding: 40px; text-align: center;">' +
+          '<h2 style="color: #1a73e8; margin-bottom: 16px;">📋 Preview Mode</h2>' +
+          '<p style="color: #5f6368; font-size: 16px; line-height: 1.6; max-width: 500px; margin: 0 auto 24px;">This calendar needs to be deployed as a Google Apps Script web app to work properly.</p>' +
+          '<p style="color: #5f6368; font-size: 14px;">Follow the deployment guide to see your calendar with real data.</p>' +
+          '</div>';
+      }
+
+      // Load calendar data
+      function loadCalendarData() {
+        document.getElementById('loading').classList.add('active');
+        document.getElementById('calendar-container').style.display = 'none';
+        
+        // Load posts
+        google.script.run
+          .withSuccessHandler(function(posts) {
+            console.log('Loaded posts:', posts);
+            allPosts = Array.isArray(posts) ? posts : [];
+            filteredPosts = allPosts;
+            
+            // Load clients
+            google.script.run
+              .withSuccessHandler(function(clients) {
+                console.log('Loaded clients:', clients);
+                allClients = Array.isArray(clients) ? clients : [];
+                populateClientFilter(allClients);
+                renderCalendar();
+                
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('calendar-container').style.display = 'block';
+              })
+              .withFailureHandler(handleError)
+              .getAllClients();
+          })
+          .withFailureHandler(handleError)
+          .getAllPosts();
+      }
+
+      // Load approval count
+      function loadApprovalCount() {
+        // Check if google.script.run is available
+        if (typeof google === 'undefined' || !google.script) {
+          return; // Skip in preview mode
+        }
+        
+        google.script.run
+          .withSuccessHandler(function(approvals) {
+            const count = Array.isArray(approvals) ? approvals.length : 0;
+            const badge = document.getElementById('approval-count');
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+          })
+          .withFailureHandler(function(error) {
+            console.error('Error loading approval count:', error);
+          })
+          .getMyPendingApprovals();
+      }
+
+      // Handle errors
+      function handleError(error) {
+        console.error('Error:', error);
+        document.getElementById('loading').innerHTML = 
+          '<p style="color: #ea4335;">⚠️ Error loading calendar data</p>' +
+          '<p style="font-size: 14px; margin-top: 8px;">' + error.message + '</p>' +
+          '<button class="btn btn-primary" onclick="window.location.reload()" style="margin-top: 16px;">Retry</button>';
+      }
+
+      // Populate client filter
+      function populateClientFilter(clients) {
+        const filter = document.getElementById('client-filter');
+        clients.forEach(client => {
+          const option = document.createElement('option');
+          option.value = client.ID;
+          option.textContent = client.Client_Name;
+          filter.appendChild(option);
+        });
+      }
+
+      // Filter calendar
+      function filterCalendar() {
+        const clientFilter = document.getElementById('client-filter').value;
+        const statusFilter = document.getElementById('status-filter').value;
+        
+        filteredPosts = allPosts.filter(post => {
+          const matchesClient = !clientFilter || post.Client_ID === clientFilter;
+          const matchesStatus = !statusFilter || post.Status === statusFilter;
+          return matchesClient && matchesStatus;
+        });
+        
+        renderCalendar();
+      }
+
+      // Render calendar
+      function renderCalendar() {
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        document.getElementById('calendar-title').textContent = 
+          monthNames[currentMonth] + ' ' + currentYear;
+        
+        const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const today = new Date();
+        const isCurrentMonth = today.getMonth() === currentMonth && 
+                               today.getFullYear() === currentYear;
+        
+        let html = '<thead><tr>' +
+                   '<th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th>' +
+                   '<th>Thu</th><th>Fri</th><th>Sat</th></tr></thead><tbody>';
+        
+        let day = 1;
+        for (let i = 0; i < 6; i++) {
+          html += '<tr>';
+          for (let j = 0; j < 7; j++) {
+            if ((i === 0 && j < firstDay) || day > daysInMonth) {
+              html += '<td class="empty"></td>';
+            } else {
+              const isToday = isCurrentMonth && day === today.getDate();
+              const dayPosts = getPostsForDate(day);
+              
+              html += '<td' + (isToday ? ' class="today"' : '') + '>';
+              html += '<div class="day-cell">';
+              html += '<div class="day-number">' + day + '</div>';
+              
+              dayPosts.forEach(post => {
+                const title = post.Post_Title || 'Untitled';
+                const status = post.Status || 'Draft';
+                html += '<div class="post-item ' + status.replace(/ /g, '_') + '" onclick="openPostDetail(\'' + post.ID + '\')" title="' + escapeHtml(title) + '">';
+                html += '<div class="post-dot"></div>';
+                html += '<span>' + escapeHtml(title.substring(0, 20)) + (title.length > 20 ? '...' : '') + '</span>';
+                html += '</div>';
+              });
+              
+              html += '</div></td>';
+              day++;
+            }
+          }
+          html += '</tr>';
+          if (day > daysInMonth) break;
+        }
+        
+        html += '</tbody>';
+        document.getElementById('calendar-table').innerHTML = html;
+      }
+
+      // Get posts for specific date
+      function getPostsForDate(day) {
+        return filteredPosts.filter(post => {
+          if (!post.Scheduled_Date) return false;
+          
+          // Handle different date formats
+          let postDate;
+          if (typeof post.Scheduled_Date === 'string') {
+            // Try parsing common formats
+            postDate = new Date(post.Scheduled_Date);
+          } else {
+            postDate = new Date(post.Scheduled_Date);
+          }
+          
+          return postDate.getDate() === day &&
+                 postDate.getMonth() === currentMonth &&
+                 postDate.getFullYear() === currentYear;
+        });
+      }
+
+      // Navigation functions
+      function previousMonth() {
+        currentMonth--;
+        if (currentMonth < 0) {
+          currentMonth = 11;
+          currentYear--;
+        }
+        renderCalendar();
+      }
+
+      function nextMonth() {
+        currentMonth++;
+        if (currentMonth > 11) {
+          currentMonth = 0;
+          currentYear++;
+        }
+        renderCalendar();
+      }
+
+      function today() {
+        const now = new Date();
+        currentMonth = now.getMonth();
+        currentYear = now.getFullYear();
+        renderCalendar();
+      }
+
+      // Open post detail (placeholder)
+      function openPostDetail(postId) {
+        alert('Post detail view coming in next phase!\n\nPost ID: ' + postId + '\n\nNext steps:\n1. Build post detail modal\n2. Show full post content\n3. Add comments section\n4. Add approval actions');
+      }
+
+      // Show approval dashboard
+      function showApprovalDashboard() {
+        // For now, just alert. In next phase, show approval modal or navigate to approval page
+        alert('Approval dashboard integration coming in next phase!\n\nFor now, you can use the existing approval dashboard from the main menu.');
+      }
+
+      // Utility function
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+    </script>
+  </body>
+</html>

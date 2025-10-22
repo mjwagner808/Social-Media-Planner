@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #1a73e8;
+      margin-bottom: 30px;
+    }
+    .approval-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .post-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .post-meta {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+    .post-copy {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 15px 0;
+      color: #444;
+      line-height: 1.6;
+    }
+    .approval-stage {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .stage-internal {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    .stage-client {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+    .btn-approve {
+      background: #34a853;
+      color: white;
+    }
+    .btn-approve:hover {
+      background: #2d8e47;
+    }
+    .btn-reject {
+      background: #ea4335;
+      color: white;
+    }
+    .btn-reject:hover {
+      background: #d33828;
+    }
+    .comment-box {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-family: Arial, sans-serif;
+      resize: vertical;
+      min-height: 80px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+    .empty-state-icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      border: 1px solid #c3e6cb;
+    }
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      border: 1px solid #f5c6cb;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📋 My Pending Approvals</h1>
+    
+    <div id="message"></div>
+    <div id="loading" class="loading">Loading your pending approvals...</div>
+    <div id="approvals-container"></div>
+  </div>
+
+  <script>
+    // Load pending approvals on page load
+    window.onload = function() {
+      loadPendingApprovals();
+    };
+
+    function loadPendingApprovals() {
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('approvals-container').innerHTML = '';
+      
+      google.script.run
+        .withSuccessHandler(displayApprovals)
+        .withFailureHandler(function(error) {
+          document.getElementById('loading').style.display = 'none';
+          showMessage('Error loading approvals: ' + error, 'error');
+        })
+        .getMyPendingApprovals();
+    }
+
+    function displayApprovals(approvals) {
+      document.getElementById('loading').style.display = 'none';
+      const container = document.getElementById('approvals-container');
+      
+      if (!approvals || approvals.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <h2>All caught up!</h2>
+            <p>You have no pending approvals at this time.</p>
+          </div>
+        `;
+        return;
+      }
+
+      approvals.forEach(function(approval) {
+        const stageClass = approval.Approval_Stage === 'Internal' ? 'stage-internal' : 'stage-client';
+        const stageLabel = approval.Approval_Stage === 'Internal' ? 'Internal Review' : 'Client Review';
+        
+        const card = document.createElement('div');
+        card.className = 'approval-card';
+        card.innerHTML = `
+          <div class="approval-stage ${stageClass}">${stageLabel}</div>
+          <div class="post-title">${escapeHtml(approval.Post_Title || 'Untitled Post')}</div>
+          <div class="post-meta">
+            <strong>Client:</strong> ${escapeHtml(approval.Client_Name || 'N/A')} | 
+            <strong>Scheduled:</strong> ${formatDate(approval.Post_Scheduled_Date)} | 
+            <strong>Post ID:</strong> ${approval.Post_ID}
+          </div>
+          <div class="post-copy">${escapeHtml(approval.Post_Copy || 'No content available')}</div>
+          
+          <textarea 
+            class="comment-box" 
+            id="comments-${approval.ID}" 
+            placeholder="Add your comments or feedback (optional for approval, recommended for changes)..."></textarea>
+          
+          <div class="actions">
+            <button class="btn btn-approve" onclick="submitDecision('${approval.ID}', 'Approved')">
+              ✓ Approve
+            </button>
+            <button class="btn btn-reject" onclick="submitDecision('${approval.ID}', 'Changes Requested')">
+              ✗ Request Changes
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function submitDecision(approvalId, decision) {
+      const comments = document.getElementById('comments-' + approvalId).value;
+      
+      if (decision === 'Changes Requested' && !comments.trim()) {
+        alert('Please provide comments explaining what changes are needed.');
+        return;
+      }
+
+      if (!confirm('Are you sure you want to ' + (decision === 'Approved' ? 'approve' : 'request changes for') + ' this post?')) {
+        return;
+      }
+
+      document.getElementById('loading').style.display = 'block';
+      
+      google.script.run
+        .withSuccessHandler(function(result) {
+          document.getElementById('loading').style.display = 'none';
+          if (result.success) {
+            showMessage(result.message, 'success');
+            // Reload approvals after 2 seconds
+            setTimeout(loadPendingApprovals, 2000);
+          } else {
+            showMessage('Error: ' + result.error, 'error');
+          }
+        })
+        .withFailureHandler(function(error) {
+          document.getElementById('loading').style.display = 'none';
+          showMessage('Error submitting decision: ' + error, 'error');
+        })
+        .submitApprovalDecision(approvalId, decision, comments);
+    }
+
+    function showMessage(message, type) {
+      const messageDiv = document.getElementById('message');
+      messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
