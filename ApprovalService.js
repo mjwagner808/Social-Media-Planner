@@ -14,11 +14,11 @@
  * Creates approval records for internal approvers
  */
 function submitForInternalReview(postId) {
-  var post = getPostById(postId);
+  var post = _getPostByIdSimple(postId);
   if (!post) {
     return {success: false, error: 'Post not found'};
   }
-  
+
   // Get client to find internal approvers
   var client = getClientById(post.Client_ID);
   if (!client) {
@@ -81,7 +81,7 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
  * Creates approval records for client approvers
  */
 function submitForClientReview(postId) {
-  var post = getPostById(postId);
+  var post = _getPostByIdSimple(postId);
   if (!post) {
     return {success: false, error: 'Post not found'};
   }
@@ -319,7 +319,7 @@ function getPendingApprovalsForUser(userEmail) {
  * Send approval request email
  */
 function sendApprovalRequestEmail(postId, approverEmail, stage) {
-  var post = getPostById(postId);
+  var post = _getPostByIdSimple(postId);
   if (!post) return;
   
   var client = getClientById(post.Client_ID);
@@ -352,7 +352,7 @@ function sendApprovalRequestEmail(postId, approverEmail, stage) {
  * Send notification when post is approved
  */
 function sendApprovalCompletedEmail(postId) {
-  var post = getPostById(postId);
+  var post = _getPostByIdSimple(postId);
   if (!post) return;
   
   var client = getClientById(post.Client_ID);
@@ -378,7 +378,7 @@ function sendApprovalCompletedEmail(postId) {
  * Send notification when changes are requested
  */
 function sendChangesRequestedEmail(postId, requesterEmail, notes) {
-  var post = getPostById(postId);
+  var post = _getPostByIdSimple(postId);
   if (!post) return;
   
   var client = getClientById(post.Client_ID);
@@ -444,7 +444,7 @@ function getMyPendingApprovals() {
       
       // Get the post details
       try {
-        var post = getPostById(approval.Post_ID);
+        var post = _getPostByIdSimple(approval.Post_ID);
         if (post) {
           approval.Post_Title = String(post.Post_Title || '');
           approval.Post_Copy = String(post.Post_Copy || '');

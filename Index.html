@@ -110,7 +110,25 @@
       .btn-secondary:hover {
         background: #f8f9fa;
       }
-      
+
+      .btn-success {
+        background: #188038;
+        color: white;
+      }
+
+      .btn-success:hover {
+        background: #137333;
+      }
+
+      .btn-warning {
+        background: #f9ab00;
+        color: #202124;
+      }
+
+      .btn-warning:hover {
+        background: #ea8600;
+      }
+
       /* Filters */
       .filters {
         display: flex;
@@ -209,6 +227,7 @@
         border: 1px solid #e8eaed;
         background: white;
         position: relative;
+        overflow: visible;
       }
       
       .calendar td.empty {
@@ -224,6 +243,8 @@
         padding: 8px;
         cursor: pointer;
         transition: background 0.2s;
+        overflow-y: auto;
+        overflow-x: visible;
       }
       
       .day-cell:hover {
@@ -262,18 +283,69 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        position: relative;
       }
-      
+
       .post-item:hover {
         transform: translateX(2px);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       }
-      
+
       .post-dot {
         width: 6px;
         height: 6px;
         border-radius: 50%;
         flex-shrink: 0;
+      }
+
+      /* Post Thumbnail */
+      .post-thumbnail {
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        object-fit: cover;
+        flex-shrink: 0;
+        background: #e8eaed;
+        border: 1px solid #dadce0;
+      }
+
+      .post-thumbnail:error {
+        display: none;
+      }
+
+      .carousel-badge {
+        font-size: 9px;
+        background: rgba(0,0,0,0.7);
+        color: white;
+        padding: 1px 4px;
+        border-radius: 2px;
+        margin-left: 2px;
+        flex-shrink: 0;
+      }
+
+      /* Image hover preview */
+      .image-preview-popup {
+        display: none;
+        position: fixed;
+        z-index: 99999;
+        background: white;
+        border: 3px solid #1a73e8;
+        border-radius: 8px;
+        padding: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        pointer-events: none;
+      }
+
+      .image-preview-popup.active {
+        display: block;
+      }
+
+      .image-preview-popup img {
+        width: 150px;
+        height: 150px;
+        object-fit: cover;
+        border-radius: 4px;
+        display: block;
       }
       
       /* Status Colors */
@@ -328,38 +400,108 @@
       }
       
       .post-item.Published {
-        background: #e4f7fb;
-        color: #01579b;
-        border-left: 3px solid #039be5;
+        background: #f3e8fd;
+        color: #6b21a8;
+        border-left: 3px solid #9334e9;
       }
-      
+
       .post-item.Published .post-dot {
-        background: #039be5;
+        background: #9334e9;
       }
-      
+
+      /* Status Badges */
+      .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .status-badge.Draft {
+        background: #f1f3f4;
+        color: #5f6368;
+      }
+
+      .status-badge.Internal_Review {
+        background: #fef7e0;
+        color: #b06000;
+      }
+
+      .status-badge.Client_Review {
+        background: #fce8e6;
+        color: #c5221f;
+      }
+
+      .status-badge.Approved {
+        background: #e6f4ea;
+        color: #137333;
+      }
+
+      .status-badge.Scheduled {
+        background: #e8f0fe;
+        color: #1967d2;
+      }
+
+      .status-badge.Published {
+        background: #f3e8fd;
+        color: #6b21a8;
+      }
+
       /* Legend */
-      .legend {
+      .status-filter {
         padding: 16px 24px;
         border-top: 1px solid #e8eaed;
         display: flex;
-        gap: 24px;
+        gap: 16px;
         flex-wrap: wrap;
         align-items: center;
       }
-      
+
       .legend-label {
         font-size: 12px;
         color: #5f6368;
         font-weight: 500;
         margin-right: 8px;
       }
-      
-      .legend-items {
+
+      .status-filter-items {
         display: flex;
-        gap: 16px;
+        gap: 8px;
         flex-wrap: wrap;
       }
-      
+
+      .status-filter-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border: 1px solid #dadce0;
+        border-radius: 16px;
+        background: white;
+        color: #5f6368;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .status-filter-btn:hover {
+        background: #f1f3f4;
+        border-color: #5f6368;
+      }
+
+      .status-filter-btn.active {
+        background: #1a73e8;
+        color: white;
+        border-color: #1a73e8;
+        font-weight: 500;
+      }
+
+      .status-filter-btn.active .legend-dot {
+        border: 1px solid white;
+      }
+
       .legend-item {
         display: flex;
         align-items: center;
@@ -405,14 +547,323 @@
         .calendar td {
           height: 80px;
         }
-        
+
         .action-bar {
           flex-direction: column;
           align-items: stretch;
         }
-        
+
         .filters {
           flex-direction: column;
+        }
+      }
+
+      /* Post Creation Modal */
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 100000;
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      .modal-overlay.active {
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 8px;
+        max-width: 800px;
+        width: 100%;
+        margin: 40px auto;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        position: relative;
+      }
+
+      .modal-header {
+        padding: 24px;
+        border-bottom: 1px solid #e8eaed;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .modal-header h2 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #202124;
+        margin: 0;
+      }
+
+      .modal-close {
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: transparent;
+        font-size: 24px;
+        color: #5f6368;
+        cursor: pointer;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+      }
+
+      .modal-close:hover {
+        background: #f1f3f4;
+      }
+
+      .modal-body {
+        padding: 24px;
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+      }
+
+      .form-section {
+        margin-bottom: 32px;
+      }
+
+      .form-section:last-child {
+        margin-bottom: 0;
+      }
+
+      .form-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #202124;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e8eaed;
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .form-row.single {
+        grid-template-columns: 1fr;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .form-group label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #5f6368;
+        margin-bottom: 6px;
+      }
+
+      .form-group label.required::after {
+        content: ' *';
+        color: #ea4335;
+      }
+
+      .form-group input,
+      .form-group textarea,
+      .form-group select {
+        padding: 10px 12px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: inherit;
+        transition: border-color 0.2s;
+      }
+
+      .form-group input:focus,
+      .form-group textarea:focus,
+      .form-group select:focus {
+        outline: none;
+        border-color: #1a73e8;
+      }
+
+      .form-group textarea {
+        resize: vertical;
+        min-height: 100px;
+      }
+
+      .form-group .char-counter {
+        font-size: 12px;
+        color: #5f6368;
+        text-align: right;
+        margin-top: 4px;
+      }
+
+      .form-help {
+        font-size: 12px;
+        color: #5f6368;
+        margin-top: 4px;
+        display: block;
+      }
+
+      .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .checkbox-item input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+      }
+
+      .checkbox-item label {
+        font-size: 14px;
+        color: #202124;
+        cursor: pointer;
+        margin: 0;
+      }
+
+      .platform-media {
+        margin-top: 16px;
+        padding: 16px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        display: none;
+      }
+
+      .platform-media.active {
+        display: block;
+      }
+
+      .platform-media-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #202124;
+        margin-bottom: 12px;
+      }
+
+      .media-upload-area {
+        border: 2px dashed #dadce0;
+        border-radius: 4px;
+        padding: 24px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: white;
+      }
+
+      .media-upload-area:hover {
+        border-color: #1a73e8;
+        background: #e8f0fe;
+      }
+
+      .media-upload-area input[type="file"] {
+        display: none;
+      }
+
+      .media-preview {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .media-preview-item {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        border-radius: 4px;
+        overflow: hidden;
+        border: 1px solid #dadce0;
+      }
+
+      .media-preview-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .media-preview-remove {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid #e8eaed;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .modal-footer .btn-group {
+        display: flex;
+        gap: 12px;
+      }
+
+      .error-message {
+        color: #ea4335;
+        font-size: 14px;
+        padding: 12px;
+        background: #fce8e6;
+        border-radius: 4px;
+        margin-bottom: 16px;
+        display: none;
+      }
+
+      .error-message.active {
+        display: block;
+      }
+
+      .success-message {
+        color: #137333;
+        font-size: 14px;
+        padding: 12px;
+        background: #e6f4ea;
+        border-radius: 4px;
+        margin-bottom: 16px;
+        display: none;
+      }
+
+      .success-message.active {
+        display: block;
+      }
+
+      @media (max-width: 768px) {
+        .modal-content {
+          margin: 0;
+          border-radius: 0;
+          min-height: 100vh;
+        }
+
+        .form-row {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -434,7 +885,7 @@
       <!-- Action Bar -->
       <div class="action-bar">
         <div class="action-buttons">
-          <button class="btn btn-primary" onclick="alert('Post creation form coming in next phase!')">
+          <button class="btn btn-primary" onclick="openPostCreationForm()">
             ➕ Create Post
           </button>
           <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
@@ -481,35 +932,225 @@
           <table class="calendar" id="calendar-table"></table>
         </div>
         
-        <!-- Legend -->
-        <div class="legend">
-          <span class="legend-label">Status:</span>
-          <div class="legend-items">
-            <div class="legend-item">
+        <!-- Status Filter -->
+        <div class="status-filter">
+          <span class="legend-label">Filter by Status:</span>
+          <div class="status-filter-items">
+            <button class="status-filter-btn active" data-status="all" onclick="filterByStatus('all')">
+              <span>All</span>
+            </button>
+            <button class="status-filter-btn" data-status="Draft" onclick="filterByStatus('Draft')">
               <div class="legend-dot" style="background: #9aa0a6;"></div>
               <span>Draft</span>
-            </div>
-            <div class="legend-item">
+            </button>
+            <button class="status-filter-btn" data-status="Internal_Review" onclick="filterByStatus('Internal_Review')">
               <div class="legend-dot" style="background: #f9ab00;"></div>
               <span>Internal Review</span>
-            </div>
-            <div class="legend-item">
+            </button>
+            <button class="status-filter-btn" data-status="Client_Review" onclick="filterByStatus('Client_Review')">
               <div class="legend-dot" style="background: #ea4335;"></div>
               <span>Client Review</span>
-            </div>
-            <div class="legend-item">
+            </button>
+            <button class="status-filter-btn" data-status="Approved" onclick="filterByStatus('Approved')">
               <div class="legend-dot" style="background: #34a853;"></div>
               <span>Approved</span>
-            </div>
-            <div class="legend-item">
+            </button>
+            <button class="status-filter-btn" data-status="Scheduled" onclick="filterByStatus('Scheduled')">
               <div class="legend-dot" style="background: #1a73e8;"></div>
               <span>Scheduled</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background: #039be5;"></div>
+            </button>
+            <button class="status-filter-btn" data-status="Published" onclick="filterByStatus('Published')">
+              <div class="legend-dot" style="background: #9334e9;"></div>
               <span>Published</span>
-            </div>
+            </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Image preview popup -->
+    <div class="image-preview-popup" id="imagePreview">
+      <img src="" alt="Image preview">
+    </div>
+
+    <!-- Post Creation Modal -->
+    <div class="modal-overlay" id="postCreationModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Create New Post</h2>
+          <button class="modal-close" onclick="closePostCreationForm()">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="error-message" id="formError"></div>
+          <div class="success-message" id="formSuccess"></div>
+
+          <form id="postCreationForm">
+            <!-- Basic Information Section -->
+            <div class="form-section">
+              <div class="form-section-title">Basic Information</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="required" for="postClient">Client</label>
+                  <select id="postClient" name="clientId" required onchange="loadSubsidiaries()">
+                    <option value="">Select a client...</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="postSubsidiaries">Subsidiaries</label>
+                  <div id="subsidiariesContainer" class="checkbox-group">
+                    <span class="form-help">Select a client first</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-group">
+                  <label class="required" for="postTitle">Post Title</label>
+                  <input type="text" id="postTitle" name="title" maxlength="100" required>
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-group">
+                  <label class="required" for="postCopy">Post Copy</label>
+                  <textarea id="postCopy" name="copy" maxlength="2000" required></textarea>
+                  <div class="char-counter">
+                    <span id="copyCharCount">0</span> / 2000 characters
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="required" for="scheduledDate">Scheduled Date</label>
+                  <input type="date" id="scheduledDate" name="scheduledDate" required>
+                </div>
+
+                <div class="form-group">
+                  <label for="scheduledTime">Scheduled Time</label>
+                  <input type="time" id="scheduledTime" name="scheduledTime">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="required" for="postStatus">Status</label>
+                  <select id="postStatus" name="status" required>
+                    <option value="Draft">Draft</option>
+                    <option value="Internal_Review">Internal Review</option>
+                    <option value="Client_Review">Client Review</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Scheduled">Scheduled</option>
+                    <option value="Published">Published</option>
+                  </select>
+                  <small class="form-help">Current workflow stage of this post</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="required" for="postHashtags">Hashtags</label>
+                  <input type="text" id="postHashtags" name="hashtags" placeholder="#example #socialmedia" required>
+                  <small class="form-help">Separate with spaces</small>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="contentCategory">Content Category</label>
+                  <select id="contentCategory" name="categoryId" multiple size="4">
+                    <!-- Categories loaded dynamically -->
+                  </select>
+                  <small class="form-help">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="linkUrl">Link URL</label>
+                  <input type="url" id="linkUrl" name="linkUrl" placeholder="https://...">
+                </div>
+              </div>
+
+              <div class="form-row single">
+                <div class="form-group">
+                  <label for="postNotes">
+                    Internal Notes
+                    <span style="color: #ea4335; font-weight: 600; margin-left: 4px;">🔒 PRIVATE</span>
+                  </label>
+                  <textarea id="postNotes" name="notes" rows="4" placeholder="Private notes for internal team only (client will NOT see this)..."></textarea>
+                  <small class="form-help" style="color: #ea4335; font-weight: 500;">
+                    ⚠️ These notes are PRIVATE and will NOT be shared with clients. Use for internal planning, budget info, strategy notes, or client preferences.
+                  </small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Platforms Section -->
+            <div class="form-section">
+              <div class="form-section-title">Platforms & Media</div>
+
+              <div class="form-group">
+                <label class="required">Select Platform(s)</label>
+                <div id="platformsContainer" class="checkbox-group">
+                  <!-- Platforms will be loaded here -->
+                </div>
+              </div>
+
+              <!-- Platform-specific media upload areas -->
+              <div id="platformMediaContainer"></div>
+            </div>
+
+            <!-- Workflow Section -->
+            <div class="form-section">
+              <div class="form-section-title">Workflow Assignment</div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="required" for="internalApprovers">Internal Approvers</label>
+                  <select id="internalApprovers" name="internalApprovers" multiple size="4" required>
+                    <!-- Users will be loaded here -->
+                  </select>
+                  <small class="form-help">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="clientApprovers">Client Approvers (Email)</label>
+                  <textarea id="clientApprovers" name="clientApprovers" rows="4" placeholder="email1@client.com, email2@client.com"></textarea>
+                  <small class="form-help">Comma-separated emails</small>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" onclick="closePostCreationForm()">Cancel</button>
+          <div class="btn-group">
+            <button class="btn btn-secondary" type="button" onclick="savePostAsDraft()">Save as Draft</button>
+            <button class="btn btn-primary" type="button" onclick="submitPostForReview()">Submit for Review</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Post Detail Modal -->
+    <div class="modal-overlay" id="postDetailModal">
+      <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+          <h2 id="postDetailTitle">Post Details</h2>
+          <button class="modal-close" onclick="closePostDetail()">&times;</button>
+        </div>
+
+        <div class="modal-body" id="postDetailBody">
+          <!-- Content loaded dynamically -->
+          <div style="text-align: center; padding: 40px;">
+            <p>Loading post details...</p>
+          </div>
+        </div>
+
+        <div class="modal-footer" id="postDetailFooter">
+          <!-- Buttons dynamically populated by updatePostDetailActions() -->
+          <button class="btn btn-secondary" type="button" onclick="closePostDetail()">Close</button>
         </div>
       </div>
     </div>
@@ -521,6 +1162,8 @@
       let allPosts = [];
       let allClients = [];
       let filteredPosts = [];
+      let currentStatusFilter = 'all';
+      let currentPostId = null; // Track which post is currently being viewed in detail modal
 
       // Initialize on load
       window.onload = function() {
@@ -548,14 +1191,25 @@
       function loadCalendarData() {
         document.getElementById('loading').classList.add('active');
         document.getElementById('calendar-container').style.display = 'none';
-        
-        // Load posts
+
+        // Load posts with images
         google.script.run
           .withSuccessHandler(function(posts) {
             console.log('Loaded posts:', posts);
+            console.log('Posts is array?', Array.isArray(posts));
+            console.log('Posts length:', posts ? posts.length : 'null/undefined');
+
+            // Check if error object
+            if (posts && posts.success === false) {
+              console.error('Error loading posts:', posts.error);
+              handleError(new Error(posts.error));
+              return;
+            }
+
             allPosts = Array.isArray(posts) ? posts : [];
             filteredPosts = allPosts;
-            
+            console.log('allPosts set to:', allPosts.length, 'posts');
+
             // Load clients
             google.script.run
               .withSuccessHandler(function(clients) {
@@ -563,15 +1217,18 @@
                 allClients = Array.isArray(clients) ? clients : [];
                 populateClientFilter(allClients);
                 renderCalendar();
-                
+
                 document.getElementById('loading').classList.remove('active');
                 document.getElementById('calendar-container').style.display = 'block';
+
+                // Setup image preview after calendar is rendered
+                setupImagePreview();
               })
               .withFailureHandler(handleError)
               .getAllClients();
           })
           .withFailureHandler(handleError)
-          .getAllPosts();
+          .getAllPostsWithImages();
       }
 
       // Load approval count
@@ -606,12 +1263,22 @@
       // Populate client filter
       function populateClientFilter(clients) {
         const filter = document.getElementById('client-filter');
+        const currentValue = filter.value; // Save current selection
+
+        // Clear existing options except "All Clients"
+        filter.innerHTML = '<option value="">All Clients</option>';
+
         clients.forEach(client => {
           const option = document.createElement('option');
           option.value = client.ID;
           option.textContent = client.Client_Name;
           filter.appendChild(option);
         });
+
+        // Restore previous selection if it still exists
+        if (currentValue) {
+          filter.value = currentValue;
+        }
       }
 
       // Filter calendar
@@ -663,9 +1330,29 @@
               dayPosts.forEach(post => {
                 const title = post.Post_Title || 'Untitled';
                 const status = post.Status || 'Draft';
-                html += '<div class="post-item ' + status.replace(/ /g, '_') + '" onclick="openPostDetail(\'' + post.ID + '\')" title="' + escapeHtml(title) + '">';
+                const imageUrl = post.image_url || '';
+                const isCarousel = post.is_carousel || false;
+
+                html += '<div class="post-item ' + status.replace(/ /g, '_') + '" ';
+                html += 'onclick="openPostDetail(\'' + post.ID + '\')" ';
+                if (imageUrl) {
+                  html += 'data-image-url="' + escapeHtml(imageUrl) + '" ';
+                }
+                html += 'title="' + escapeHtml(title) + '">';
                 html += '<div class="post-dot"></div>';
-                html += '<span>' + escapeHtml(title.substring(0, 20)) + (title.length > 20 ? '...' : '') + '</span>';
+
+                // Add thumbnail if image exists
+                if (imageUrl) {
+                  html += '<img src="' + escapeHtml(imageUrl) + '" class="post-thumbnail" alt="Post thumbnail">';
+                }
+
+                html += '<span>' + escapeHtml(title.substring(0, 18)) + (title.length > 18 ? '...' : '') + '</span>';
+
+                // Add carousel badge if applicable
+                if (isCarousel) {
+                  html += '<span class="carousel-badge">📸</span>';
+                }
+
                 html += '</div>';
               });
               
@@ -727,9 +1414,641 @@
         renderCalendar();
       }
 
+      // Filter posts by status
+      function filterByStatus(status) {
+        console.log('Filtering by status:', status);
+        currentStatusFilter = status;
+
+        // Update active button state
+        document.querySelectorAll('.status-filter-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        document.querySelector(`[data-status="${status}"]`).classList.add('active');
+
+        // Filter posts
+        if (status === 'all') {
+          filteredPosts = allPosts;
+        } else {
+          filteredPosts = allPosts.filter(post => {
+            const postStatus = (post.Status || 'Draft').replace(/ /g, '_');
+            return postStatus === status;
+          });
+        }
+
+        // Re-render calendar with filtered posts
+        renderCalendar();
+      }
+
       // Open post detail (placeholder)
       function openPostDetail(postId) {
-        alert('Post detail view coming in next phase!\n\nPost ID: ' + postId + '\n\nNext steps:\n1. Build post detail modal\n2. Show full post content\n3. Add comments section\n4. Add approval actions');
+        // Store current post ID for edit functionality
+        currentPostId = postId;
+
+        // Show modal with loading state
+        document.getElementById('postDetailModal').classList.add('active');
+        document.getElementById('postDetailBody').innerHTML = '<div style="text-align: center; padding: 40px;"><p>Loading post details...</p></div>';
+
+        // Fetch post data
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              displayPostDetail(result.post);
+            } else {
+              document.getElementById('postDetailBody').innerHTML =
+                '<div style="text-align: center; padding: 40px; color: #ea4335;"><p>Error: ' + (result.error || 'Failed to load post') + '</p></div>';
+            }
+          })
+          .withFailureHandler(function(error) {
+            document.getElementById('postDetailBody').innerHTML =
+              '<div style="text-align: center; padding: 40px; color: #ea4335;"><p>Error: ' + error.message + '</p></div>';
+          })
+          .getPostById(postId);
+      }
+
+      function closePostDetail() {
+        document.getElementById('postDetailModal').classList.remove('active');
+        currentPostId = null;
+      }
+
+      // Edit current post being viewed
+      function editCurrentPost() {
+        if (!currentPostId) {
+          console.error('No post ID available for editing');
+          return;
+        }
+
+        // Save the post ID before closing (closePostDetail sets currentPostId to null)
+        const postIdToEdit = currentPostId;
+        console.log('Editing post:', postIdToEdit);
+
+        // Close post detail modal
+        closePostDetail();
+
+        // Open edit form with this post
+        editPost(postIdToEdit);
+      }
+
+      function displayPostDetail(post) {
+        console.log('Displaying post:', post);
+
+        // Format status badge
+        const statusClass = (post.Status || 'Draft').replace(/ /g, '_');
+        const statusBadge = `<span class="status-badge ${statusClass}">${post.Status || 'Draft'}</span>`;
+
+        // Format dates
+        const scheduledDate = post.Scheduled_Date ? new Date(post.Scheduled_Date).toLocaleDateString() : 'Not scheduled';
+        const scheduledTime = post.Scheduled_Time || '';
+        const createdDate = post.Created_Date ? new Date(post.Created_Date).toLocaleString() : '';
+        const modifiedDate = post.Modified_Date ? new Date(post.Modified_Date).toLocaleString() : '';
+
+        // Build HTML
+        let html = '<div class="post-detail-content">';
+
+        // Header section with title and status
+        html += '<div style="margin-bottom: 24px;">';
+        html += `<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">`;
+        html += `<h3 style="margin: 0; flex: 1;">${escapeHtml(post.Post_Title || 'Untitled Post')}</h3>`;
+        html += statusBadge;
+        html += '</div>';
+        html += `<p style="color: #5f6368; margin: 4px 0;">ID: ${post.ID}</p>`;
+        html += '</div>';
+
+        // Client & Subsidiaries
+        html += '<div class="detail-section">';
+        html += '<h4>Client Information</h4>';
+        html += `<p><strong>Client:</strong> ${post.client ? escapeHtml(post.client.Client_Name) : 'N/A'}</p>`;
+        if (post.subsidiaries && post.subsidiaries.length > 0) {
+          html += '<p><strong>Subsidiaries:</strong> ' + post.subsidiaries.map(s => escapeHtml(s.Subsidiary_Name)).join(', ') + '</p>';
+        }
+        html += '</div>';
+
+        // Post Content
+        html += '<div class="detail-section">';
+        html += '<h4>Post Content</h4>';
+        html += `<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; white-space: pre-wrap;">${escapeHtml(post.Post_Copy || '')}</div>`;
+        if (post.Hashtags) {
+          html += `<p style="margin-top: 8px;"><strong>Hashtags:</strong> ${escapeHtml(post.Hashtags)}</p>`;
+        }
+        if (post.Link_URL) {
+          html += `<p><strong>Link:</strong> <a href="${escapeHtml(post.Link_URL)}" target="_blank">${escapeHtml(post.Link_URL)}</a></p>`;
+        }
+        html += '</div>';
+
+        // Categories
+        if (post.categories && post.categories.length > 0) {
+          html += '<div class="detail-section">';
+          html += '<h4>Content Categories</h4>';
+          html += '<p>' + post.categories.map(c => escapeHtml(c.Category_Name)).join(', ') + '</p>';
+          html += '</div>';
+        }
+
+        // Scheduling
+        html += '<div class="detail-section">';
+        html += '<h4>Scheduling</h4>';
+        html += `<p><strong>Scheduled Date:</strong> ${scheduledDate} ${scheduledTime}</p>`;
+        html += '</div>';
+
+        // Platforms & Media
+        if (post.platforms && post.platforms.length > 0) {
+          html += '<div class="detail-section">';
+          html += '<h4>Platforms & Media</h4>';
+          html += '<div style="display: grid; gap: 12px;">';
+
+          post.platforms.forEach(platform => {
+            html += '<div style="border: 1px solid #dadce0; padding: 12px; border-radius: 4px;">';
+            html += `<p style="margin: 0 0 8px 0;"><strong>Platform:</strong> ${escapeHtml(platform.Platform_Name || platform.Platform_ID)}</p>`;
+            if (platform.Platform_Copy) {
+              html += `<p style="margin: 0 0 8px 0;"><strong>Custom Copy:</strong> ${escapeHtml(platform.Platform_Copy)}</p>`;
+            }
+            if (platform.Media_Type) {
+              html += `<p style="margin: 0 0 8px 0;"><strong>Media Type:</strong> ${escapeHtml(platform.Media_Type)}</p>`;
+            }
+            if (platform.Media_File_URL_Extracted) {
+              html += `<div style="margin-top: 8px;">`;
+              html += `<img src="${escapeHtml(platform.Media_File_URL_Extracted)}" style="max-width: 100%; max-height: 300px; border-radius: 4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">`;
+              html += `<p style="display: none; color: #5f6368; font-size: 12px;">Image failed to load</p>`;
+              html += '</div>';
+            }
+            html += '</div>';
+          });
+
+          html += '</div>';
+          html += '</div>';
+        }
+
+        // Notes
+        if (post.Notes) {
+          html += '<div class="detail-section">';
+          html += '<h4>Notes</h4>';
+          html += `<p>${escapeHtml(post.Notes)}</p>`;
+          html += '</div>';
+        }
+
+        // Approvers
+        html += '<div class="detail-section">';
+        html += '<h4>Approvals</h4>';
+        if (post.Internal_Approvers) {
+          html += `<p><strong>Internal Approvers:</strong> ${escapeHtml(post.Internal_Approvers)}</p>`;
+        }
+        if (post.Client_Approvers) {
+          html += `<p><strong>Client Approvers:</strong> ${escapeHtml(post.Client_Approvers)}</p>`;
+        }
+        html += '</div>';
+
+        // Comments section (will be loaded separately)
+        html += '<div class="detail-section">';
+        html += '<h4>Comments</h4>';
+        html += '<div id="commentsContainer" style="margin-bottom: 16px;">';
+        html += '<p style="color: #5f6368; font-style: italic;">Loading comments...</p>';
+        html += '</div>';
+
+        // Comment form
+        html += '<div id="commentForm" style="display: none; background: #f8f9fa; padding: 16px; border-radius: 4px; margin-bottom: 12px;">';
+        html += '<div style="margin-bottom: 12px;">';
+        html += '<label style="display: block; margin-bottom: 8px; font-weight: 500;">Comment Type:</label>';
+        html += '<div style="display: flex; gap: 16px; flex-wrap: wrap;">';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Internal_Note" checked> Internal Note</label>';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Revision_Request"> Revision Request</label>';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Approval_Feedback"> Approval Feedback</label>';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Question"> Question</label>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div style="margin-bottom: 12px;">';
+        html += '<label style="display: block; margin-bottom: 4px; font-weight: 500;">Your Comment:</label>';
+        html += '<textarea id="commentTextInput" style="width: 100%; min-height: 80px; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; resize: vertical;" placeholder="Enter your comment..."></textarea>';
+        html += '</div>';
+        html += '<div style="display: flex; gap: 8px;">';
+        html += '<button class="btn btn-primary" type="button" onclick="submitComment(\'' + post.ID + '\')">Submit Comment</button>';
+        html += '<button class="btn btn-secondary" type="button" onclick="cancelComment()">Cancel</button>';
+        html += '</div>';
+        html += '</div>';
+
+        html += '<button class="btn btn-secondary" id="addCommentBtn" type="button" onclick="showCommentForm()">💬 Add Comment</button>';
+        html += '</div>';
+
+        html += '</div>';
+
+        // Add CSS for detail sections
+        html += `
+          <style>
+            .post-detail-content {
+              padding: 8px 0;
+            }
+            .detail-section {
+              margin-bottom: 20px;
+              padding-bottom: 20px;
+              border-bottom: 1px solid #e8eaed;
+            }
+            .detail-section:last-child {
+              border-bottom: none;
+            }
+            .detail-section h4 {
+              margin: 0 0 12px 0;
+              color: #202124;
+              font-size: 14px;
+              font-weight: 500;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+            .detail-section p {
+              margin: 8px 0;
+              line-height: 1.6;
+            }
+          </style>
+        `;
+
+        document.getElementById('postDetailBody').innerHTML = html;
+
+        // Update footer with action buttons based on status
+        updatePostDetailActions(post);
+
+        // Load comments separately to avoid slowing down initial display
+        loadComments(post.ID);
+      }
+
+      function loadComments(postId) {
+        google.script.run
+          .withSuccessHandler(function(comments) {
+            displayComments(comments);
+          })
+          .withFailureHandler(function(error) {
+            document.getElementById('commentsContainer').innerHTML =
+              '<p style="color: #ea4335;">Error loading comments</p>';
+          })
+          .getCommentsForPost(postId);
+      }
+
+      function displayComments(comments) {
+        const container = document.getElementById('commentsContainer');
+
+        if (!comments || comments.length === 0) {
+          container.innerHTML = '<p style="color: #5f6368; font-style: italic;">No comments yet</p>';
+          return;
+        }
+
+        let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
+        comments.forEach(comment => {
+          const date = comment.Comment_Date ? new Date(comment.Comment_Date).toLocaleString() : '';
+          const commenter = comment.Commenter_Email || 'Unknown';
+          const commentType = comment.Comment_Type || 'Internal_Note';
+
+          // Format comment type for display
+          const typeLabel = commentType.replace(/_/g, ' ');
+
+          // Color code border by comment type
+          let borderColor = '#1a73e8'; // Default blue
+          if (commentType === 'Revision_Request') borderColor = '#f9ab00'; // Yellow
+          else if (commentType === 'Approval_Feedback') borderColor = '#188038'; // Green
+          else if (commentType === 'Question') borderColor = '#ea4335'; // Red
+
+          html += `<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 3px solid ${borderColor};">`;
+          html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">`;
+          html += `<div style="display: flex; flex-direction: column; gap: 2px;">`;
+          html += `<strong style="font-size: 13px;">${escapeHtml(commenter)}</strong>`;
+          html += `<span style="font-size: 11px; color: #5f6368; text-transform: capitalize;">${escapeHtml(typeLabel)}</span>`;
+          html += `</div>`;
+          html += `<span style="font-size: 12px; color: #5f6368;">${date}</span>`;
+          html += '</div>';
+          html += `<p style="margin: 0; white-space: pre-wrap;">${escapeHtml(comment.Comment_Text)}</p>`;
+          html += '</div>';
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+      }
+
+      function updatePostDetailActions(post) {
+        const footer = document.getElementById('postDetailFooter');
+        let html = '';
+
+        // Always show Edit Post button (on the left)
+        html += '<button class="btn btn-primary" type="button" onclick="editCurrentPost()">Edit Post</button>';
+
+        // Add status change buttons based on current status (in the middle)
+        if (post.Status === 'Draft') {
+          html += ' <button class="btn btn-primary" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Internal_Review\')">Submit for Review</button>';
+        } else if (post.Status === 'Internal_Review') {
+          html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
+          html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
+        } else if (post.Status === 'Client_Review') {
+          html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
+          html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
+        } else if (post.Status === 'Approved') {
+          html += ' <button class="btn btn-primary" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Scheduled\')">Schedule</button>';
+        }
+
+        // Close button always on the right
+        html += ' <button class="btn btn-secondary" type="button" onclick="closePostDetail()">Close</button>';
+
+        footer.innerHTML = html;
+      }
+
+      function changePostStatus(postId, newStatus) {
+        if (!confirm('Change post status to ' + newStatus.replace('_', ' ') + '?')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              // Refresh the post detail view
+              openPostDetail(postId);
+              // Refresh the calendar
+              loadCalendarData();
+            } else {
+              alert('Error: ' + (result.error || 'Failed to update status'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('Error: ' + error.message);
+          })
+          .updatePostStatus(postId, newStatus);
+      }
+
+      function editPost(postId) {
+        console.log('Editing post:', postId);
+
+        // Close the detail modal
+        closePostDetail();
+
+        // Show loading indicator immediately
+        const modal = document.getElementById('postCreationModal');
+        modal.classList.add('active');
+        const modalBody = modal.querySelector('.modal-body');
+        const originalContent = modalBody.innerHTML;
+        modalBody.innerHTML = `
+          <div style="text-align: center; padding: 80px 20px;">
+            <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top: 24px; color: #5f6368; font-size: 16px;">Loading post data...</p>
+            <p style="margin-top: 8px; color: #80868b; font-size: 14px;">This may take a moment</p>
+          </div>
+        `;
+
+        // Load the post data
+        google.script.run
+          .withSuccessHandler(function(result) {
+            // Restore modal content
+            modalBody.innerHTML = originalContent;
+
+            if (result.success) {
+              loadPostIntoForm(result.post);
+            } else {
+              modal.classList.remove('active');
+              alert('Error loading post: ' + (result.error || 'Failed to load post'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            modal.classList.remove('active');
+            alert('Error: ' + error.message);
+          })
+          .getPostById(postId);
+      }
+
+      function loadPostIntoForm(post) {
+        console.log('Loading post into form:', post);
+
+        // Store the post ID for updating
+        window.editingPostId = post.ID;
+
+        // Open the post creation modal
+        document.getElementById('postCreationModal').classList.add('active');
+
+        // Update modal title to indicate edit mode
+        document.querySelector('#postCreationModal .modal-header h2').textContent = 'Edit Post: ' + post.Post_Title;
+
+        // Add edit mode indicator
+        const modalHeader = document.querySelector('#postCreationModal .modal-header');
+        let editBadge = document.getElementById('editModeBadge');
+        if (!editBadge) {
+          editBadge = document.createElement('span');
+          editBadge.id = 'editModeBadge';
+          editBadge.style.cssText = 'background: #f9ab00; color: #202124; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; margin-left: 12px;';
+          editBadge.textContent = 'EDITING';
+          modalHeader.querySelector('h2').appendChild(editBadge);
+        }
+
+        // Load form options first, then populate fields
+        if (!formOptions) {
+          google.script.run
+            .withSuccessHandler(function(options) {
+              if (options.success === false) {
+                alert('Failed to load form options: ' + options.error);
+                return;
+              }
+              formOptions = options;
+              populateFormDropdowns();
+
+              // Now populate the post data after dropdowns are ready
+              populatePostFields(post);
+            })
+            .withFailureHandler(function(error) {
+              alert('Error loading form options: ' + error.message);
+            })
+            .getFormOptions();
+        } else {
+          // Form options already loaded, re-populate dropdowns then fields
+          populateFormDropdowns();
+
+          // Small delay to ensure DOM is updated before populating fields
+          setTimeout(function() {
+            populatePostFields(post);
+          }, 100);
+        }
+      }
+
+      function populatePostFields(post) {
+        try {
+          console.log('=== Populating post fields ===');
+          console.log('Post data:', post);
+
+        // Pre-fill basic fields
+        document.getElementById('postTitle').value = post.Post_Title || '';
+        document.getElementById('postCopy').value = post.Post_Copy || '';
+
+        // Fix date handling to avoid timezone issues
+        if (post.Scheduled_Date) {
+          // If date is ISO string, extract date part
+          let dateStr = post.Scheduled_Date;
+          if (typeof dateStr === 'string' && dateStr.includes('T')) {
+            dateStr = dateStr.split('T')[0];
+          } else if (dateStr instanceof Date || typeof dateStr === 'object') {
+            // If it's a Date object from server, convert to local date string
+            const d = new Date(dateStr);
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          }
+          console.log('Setting date to:', dateStr, 'from:', post.Scheduled_Date);
+          document.getElementById('scheduledDate').value = dateStr;
+        }
+
+        document.getElementById('scheduledTime').value = post.Scheduled_Time || '';
+        console.log('Setting status to:', post.Status);
+        document.getElementById('postStatus').value = post.Status || 'Draft';
+        console.log('Setting hashtags to:', post.Hashtags);
+        document.getElementById('postHashtags').value = post.Hashtags || '';
+        console.log('Setting link URL to:', post.Link_URL);
+        document.getElementById('linkUrl').value = post.Link_URL || '';
+        console.log('Setting notes to:', post.Notes);
+        document.getElementById('postNotes').value = post.Notes || '';
+
+        // Update character count
+        updateCharCount();
+
+        // Select client
+        const clientSelect = document.getElementById('postClient');
+        console.log('Client dropdown element:', clientSelect);
+        console.log('Client dropdown options:', Array.from(clientSelect.options).map(o => o.value));
+        console.log('Setting client to:', post.Client_ID);
+        clientSelect.value = post.Client_ID || '';
+        console.log('Client dropdown value after setting:', clientSelect.value);
+
+        // Load subsidiaries for the client
+        if (post.Client_ID) {
+          google.script.run
+            .withSuccessHandler(function(subsidiaries) {
+              populateSubsidiaries(subsidiaries);
+
+              // Select subsidiaries
+              if (post.Subsidiary_IDs) {
+                const subIds = post.Subsidiary_IDs.split(',').map(id => id.trim());
+                subIds.forEach(subId => {
+                  const checkbox = document.querySelector(`input[name="subsidiaryIds"][value="${subId}"]`);
+                  if (checkbox) checkbox.checked = true;
+                });
+              }
+            })
+            .getClientSubsidiaries(post.Client_ID);
+        }
+
+        // Select content categories
+        console.log('Content_Category:', post.Content_Category);
+        console.log('Content_Category_ID:', post.Content_Category_ID);
+        if (post.Content_Category || post.Content_Category_ID) {
+          const catValues = (post.Content_Category_ID || post.Content_Category).split(',').map(v => v.trim());
+          console.log('Category values to select:', catValues);
+          const categorySelect = document.getElementById('contentCategory');
+          console.log('Category dropdown options:', Array.from(categorySelect.options).map(o => o.value + ':' + o.text));
+
+          // Match by ID first, then try matching by name if needed
+          Array.from(categorySelect.options).forEach(option => {
+            // Check if matches by ID (e.g., "CAT-003")
+            if (catValues.indexOf(option.value) > -1) {
+              console.log('Selecting category by ID:', option.value);
+              option.selected = true;
+            }
+            // Check if matches by name (e.g., "Company_Culture" matches "Company Culture")
+            else if (catValues.some(val => val.replace(/_/g, ' ').toLowerCase() === option.textContent.trim().toLowerCase())) {
+              console.log('Selecting category by name:', option.value, option.textContent);
+              option.selected = true;
+            }
+          });
+        }
+
+        // Select approvers
+        if (post.Internal_Approvers) {
+          const approverIds = post.Internal_Approvers.split(',').map(id => id.trim());
+          const approverSelect = document.getElementById('internalApprovers');
+          Array.from(approverSelect.options).forEach(option => {
+            if (approverIds.indexOf(option.value) > -1) {
+              option.selected = true;
+            }
+          });
+        }
+
+        // Load platforms
+        console.log('Post platforms:', post.platforms);
+        if (post.platforms && post.platforms.length > 0) {
+          selectedPlatforms = [];
+          post.platforms.forEach(platform => {
+            console.log('Processing platform:', platform);
+            const platformId = platform.Platform_ID || platform.Platform;
+            const platformName = platform.Platform_Name || platform.Platform;
+            console.log('Platform ID:', platformId, 'Platform Name:', platformName);
+            selectedPlatforms.push(platformName); // Use name for checkbox matching
+
+            // Add platform media UI
+            setTimeout(() => {
+              addPlatformMedia(platformName, platform.Media_File_URL || '', platform.Media_Type || 'Image');
+            }, 100);
+          });
+
+          // Update platform checkboxes (checkboxes use Platform_Name as value)
+          selectedPlatforms.forEach(platformName => {
+            console.log('Looking for platform checkbox with value:', platformName);
+            const checkbox = document.querySelector(`input[value="${platformName}"]`);
+            console.log('Found checkbox:', checkbox);
+            if (checkbox) {
+              checkbox.checked = true;
+              console.log('Checked platform:', platformName);
+            }
+          });
+        }
+        } catch (error) {
+          console.error('Error in populatePostFields:', error);
+          console.error('Error stack:', error.stack);
+          alert('Error populating form fields: ' + error.message);
+        }
+      }
+
+      function showCommentForm() {
+        document.getElementById('commentForm').style.display = 'block';
+        document.getElementById('addCommentBtn').style.display = 'none';
+        document.getElementById('commentTextInput').focus();
+      }
+
+      function cancelComment() {
+        document.getElementById('commentForm').style.display = 'none';
+        document.getElementById('addCommentBtn').style.display = 'inline-flex';
+        document.getElementById('commentTextInput').value = '';
+        // Reset to default radio button
+        document.querySelector('input[name="commentType"][value="Internal_Note"]').checked = true;
+      }
+
+      function submitComment(postId) {
+        const commentText = document.getElementById('commentTextInput').value.trim();
+        if (!commentText) {
+          alert('Please enter a comment');
+          return;
+        }
+
+        // Get selected comment type
+        const selectedType = document.querySelector('input[name="commentType"]:checked');
+        const commentType = selectedType ? selectedType.value : 'Internal_Note';
+
+        // Show loading state
+        const container = document.getElementById('commentsContainer');
+        const originalHtml = container.innerHTML;
+        container.innerHTML = '<p style="color: #5f6368; font-style: italic;">Saving comment...</p>';
+
+        // Hide form
+        document.getElementById('commentForm').style.display = 'none';
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              // Clear the form
+              document.getElementById('commentTextInput').value = '';
+              document.querySelector('input[name="commentType"][value="Internal_Note"]').checked = true;
+
+              // Show add button again
+              document.getElementById('addCommentBtn').style.display = 'inline-flex';
+
+              // Reload comments to show the new one
+              loadComments(postId);
+            } else {
+              container.innerHTML = originalHtml;
+              document.getElementById('commentForm').style.display = 'block';
+              alert('Error: ' + (result.error || 'Failed to add comment'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            container.innerHTML = originalHtml;
+            document.getElementById('commentForm').style.display = 'block';
+            alert('Error: ' + error.message);
+          })
+          .addCommentToPost(postId, commentText, commentType);
       }
 
       // Show approval dashboard
@@ -743,6 +2062,446 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      // Image preview functions
+      function setupImagePreview() {
+        const preview = document.getElementById('imagePreview');
+        const calendarTable = document.getElementById('calendar-table');
+
+        if (!calendarTable) return;
+
+        // Event delegation for mouseenter
+        calendarTable.addEventListener('mouseover', function(e) {
+          const postItem = e.target.closest('.post-item[data-image-url]');
+          if (postItem) {
+            const imageUrl = postItem.getAttribute('data-image-url');
+            if (imageUrl) {
+              const img = preview.querySelector('img');
+              img.src = imageUrl;
+              preview.classList.add('active');
+
+              // Position near the item
+              const rect = postItem.getBoundingClientRect();
+              preview.style.left = (rect.right + 10) + 'px';
+              preview.style.top = rect.top + 'px';
+            }
+          }
+        });
+
+        // Event delegation for mouseleave
+        calendarTable.addEventListener('mouseout', function(e) {
+          const postItem = e.target.closest('.post-item[data-image-url]');
+          if (postItem) {
+            preview.classList.remove('active');
+          }
+        });
+      }
+
+      // Post Creation Form Functions
+      let formOptions = null;
+      let selectedPlatforms = [];
+
+      function openPostCreationForm() {
+        const modal = document.getElementById('postCreationModal');
+        modal.classList.add('active');
+
+        // Load form options if not already loaded
+        if (!formOptions) {
+          loadFormOptions();
+        }
+
+        // Set up character counter
+        const copyTextarea = document.getElementById('postCopy');
+        copyTextarea.addEventListener('input', updateCharCount);
+      }
+
+      function closePostCreationForm() {
+        const modal = document.getElementById('postCreationModal');
+        modal.classList.remove('active');
+        resetForm();
+
+        // Clear edit mode
+        window.editingPostId = null;
+
+        // Reset modal title
+        document.querySelector('#postCreationModal .modal-header h2').textContent = 'Create New Post';
+
+        // Remove edit badge
+        const editBadge = document.getElementById('editModeBadge');
+        if (editBadge) {
+          editBadge.remove();
+        }
+      }
+
+      function loadFormOptions() {
+        google.script.run
+          .withSuccessHandler(function(options) {
+            if (options.success === false) {
+              showFormError('Failed to load form options: ' + options.error);
+              return;
+            }
+
+            formOptions = options;
+            populateFormDropdowns();
+          })
+          .withFailureHandler(function(error) {
+            showFormError('Error loading form: ' + error.message);
+          })
+          .getFormOptions();
+      }
+
+      function populateFormDropdowns() {
+        // Populate clients
+        const clientSelect = document.getElementById('postClient');
+        clientSelect.innerHTML = '<option value="">Select a client...</option>';
+        formOptions.clients.forEach(client => {
+          const option = document.createElement('option');
+          option.value = client.ID;
+          option.textContent = client.Client_Name;
+          clientSelect.appendChild(option);
+        });
+
+        // Populate platforms
+        const platformsContainer = document.getElementById('platformsContainer');
+        platformsContainer.innerHTML = '';
+        formOptions.platforms.forEach(platform => {
+          const label = document.createElement('label');
+          label.className = 'checkbox-item';
+          label.innerHTML = `
+            <input type="checkbox" value="${platform.Platform_Name}" onchange="togglePlatformMedia('${platform.Platform_Name}')">
+            <span>${platform.Platform_Name}</span>
+          `;
+          platformsContainer.appendChild(label);
+        });
+
+        // Populate categories
+        const categorySelect = document.getElementById('contentCategory');
+        categorySelect.innerHTML = '';
+        formOptions.categories.forEach(category => {
+          const option = document.createElement('option');
+          option.value = category.ID;
+          option.textContent = category.Category_Name;
+          categorySelect.appendChild(option);
+        });
+
+        // Populate internal approvers
+        const approversSelect = document.getElementById('internalApprovers');
+        approversSelect.innerHTML = '';
+        formOptions.users.forEach(user => {
+          const option = document.createElement('option');
+          option.value = user.Email;
+          option.textContent = user.Full_Name + ' (' + user.Email + ')';
+          approversSelect.appendChild(option);
+        });
+      }
+
+      function populateSubsidiaries(subsidiaries) {
+        const subsidiariesContainer = document.getElementById('subsidiariesContainer');
+
+        if (!subsidiaries || subsidiaries.length === 0) {
+          subsidiariesContainer.innerHTML = '<span class="form-help">No subsidiaries for this client</span>';
+          return;
+        }
+
+        subsidiariesContainer.innerHTML = '';
+        subsidiaries.forEach(sub => {
+          const label = document.createElement('label');
+          label.className = 'checkbox-item';
+          label.innerHTML = `
+            <input type="checkbox" name="subsidiaryIds" value="${sub.ID}">
+            <span>${sub.Subsidiary_Name}</span>
+          `;
+          subsidiariesContainer.appendChild(label);
+        });
+      }
+
+      function loadSubsidiaries() {
+        const clientId = document.getElementById('postClient').value;
+        const subsidiariesContainer = document.getElementById('subsidiariesContainer');
+
+        if (!clientId) {
+          subsidiariesContainer.innerHTML = '<span class="form-help">Select a client first</span>';
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(populateSubsidiaries)
+          .withFailureHandler(function(error) {
+            subsidiariesContainer.innerHTML = '<span class="form-help" style="color: #ea4335;">Error loading subsidiaries</span>';
+          })
+          .getClientSubsidiaries(clientId);
+      }
+
+      function addPlatformMedia(platformName, mediaUrl, mediaType) {
+        const platformMediaContainer = document.getElementById('platformMediaContainer');
+
+        // Check if media area already exists
+        let mediaArea = document.getElementById('platform-media-' + platformName);
+        if (!mediaArea) {
+          // Create new media upload area
+          mediaArea = document.createElement('div');
+          mediaArea.id = 'platform-media-' + platformName;
+          mediaArea.className = 'platform-media active';
+          mediaArea.innerHTML = `
+            <div class="platform-media-title">${platformName} Media</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="media-url-${platformName}">Media URL (Box.com link)</label>
+                <input type="url" id="media-url-${platformName}" placeholder="https://box.com/...">
+              </div>
+              <div class="form-group">
+                <label for="media-type-${platformName}">Media Type</label>
+                <select id="media-type-${platformName}">
+                  <option value="Image">Image</option>
+                  <option value="Video">Video</option>
+                  <option value="Carousel">Carousel</option>
+                </select>
+              </div>
+            </div>
+          `;
+          platformMediaContainer.appendChild(mediaArea);
+        }
+
+        // Populate with existing values if provided
+        if (mediaUrl) {
+          const urlInput = document.getElementById('media-url-' + platformName);
+          if (urlInput) urlInput.value = mediaUrl;
+        }
+        if (mediaType) {
+          const typeSelect = document.getElementById('media-type-' + platformName);
+          if (typeSelect) typeSelect.value = mediaType;
+        }
+      }
+
+      function togglePlatformMedia(platformName) {
+        const checkbox = event.target;
+        const platformMediaContainer = document.getElementById('platformMediaContainer');
+
+        if (checkbox.checked) {
+          // Add platform to selected list
+          if (!selectedPlatforms.includes(platformName)) {
+            selectedPlatforms.push(platformName);
+          }
+
+          // Create media upload area for this platform
+          const mediaArea = document.createElement('div');
+          mediaArea.id = 'platform-media-' + platformName;
+          mediaArea.className = 'platform-media active';
+          mediaArea.innerHTML = `
+            <div class="platform-media-title">${platformName} Media</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="media-url-${platformName}">Media URL (Box.com link)</label>
+                <input type="url" id="media-url-${platformName}" placeholder="https://box.com/...">
+              </div>
+              <div class="form-group">
+                <label for="media-type-${platformName}">Media Type</label>
+                <select id="media-type-${platformName}">
+                  <option value="Image">Image</option>
+                  <option value="Video">Video</option>
+                  <option value="Carousel">Carousel</option>
+                </select>
+              </div>
+            </div>
+          `;
+          platformMediaContainer.appendChild(mediaArea);
+        } else {
+          // Remove platform from selected list
+          selectedPlatforms = selectedPlatforms.filter(p => p !== platformName);
+
+          // Remove media upload area
+          const mediaArea = document.getElementById('platform-media-' + platformName);
+          if (mediaArea) {
+            mediaArea.remove();
+          }
+        }
+      }
+
+      function updateCharCount() {
+        const copyTextarea = document.getElementById('postCopy');
+        const charCount = document.getElementById('copyCharCount');
+        charCount.textContent = copyTextarea.value.length;
+      }
+
+      function validateForm() {
+        const errors = [];
+
+        // Required fields
+        if (!document.getElementById('postClient').value) {
+          errors.push('Client is required');
+        }
+        if (!document.getElementById('postTitle').value.trim()) {
+          errors.push('Post title is required');
+        }
+        if (!document.getElementById('postCopy').value.trim()) {
+          errors.push('Post copy is required');
+        }
+        if (!document.getElementById('postHashtags').value.trim()) {
+          errors.push('Hashtags are required');
+        }
+        if (!document.getElementById('scheduledDate').value) {
+          errors.push('Scheduled date is required');
+        }
+
+        // At least one platform must be selected
+        const platformCheckboxes = document.querySelectorAll('#platformsContainer input[type="checkbox"]:checked');
+        if (platformCheckboxes.length === 0) {
+          errors.push('At least one platform must be selected');
+        }
+
+        // At least one internal approver must be selected
+        const approverSelect = document.getElementById('internalApprovers');
+        if (approverSelect.selectedOptions.length === 0) {
+          errors.push('At least one internal approver must be selected');
+        }
+
+        return errors;
+      }
+
+      function collectFormData(submitForReview) {
+        // Collect basic data
+        const formData = {
+          clientId: document.getElementById('postClient').value,
+          title: document.getElementById('postTitle').value.trim(),
+          copy: document.getElementById('postCopy').value.trim(),
+          hashtags: document.getElementById('postHashtags').value.trim(),
+          scheduledDate: document.getElementById('scheduledDate').value,
+          scheduledTime: document.getElementById('scheduledTime').value,
+          status: document.getElementById('postStatus').value,
+          categoryId: Array.from(document.getElementById('contentCategory').selectedOptions).map(opt => opt.value).join(', '),
+          linkUrl: document.getElementById('linkUrl').value.trim(),
+          notes: document.getElementById('postNotes').value.trim(),
+          submitForReview: submitForReview
+        };
+
+        // Collect subsidiaries
+        const subsidiaryCheckboxes = document.querySelectorAll('input[name="subsidiaryIds"]:checked');
+        formData.subsidiaryIds = Array.from(subsidiaryCheckboxes).map(cb => cb.value).join(', ');
+
+        // Collect internal approvers
+        const approverSelect = document.getElementById('internalApprovers');
+        formData.internalApprovers = Array.from(approverSelect.selectedOptions).map(opt => opt.value).join(', ');
+
+        // Collect client approvers
+        const clientApprovers = document.getElementById('clientApprovers').value.trim();
+        formData.clientApprovers = clientApprovers;
+
+        // Collect platform data
+        formData.platforms = selectedPlatforms.map(platformName => {
+          return {
+            platformName: platformName,
+            mediaUrl: document.getElementById('media-url-' + platformName)?.value || '',
+            mediaType: document.getElementById('media-type-' + platformName)?.value || 'Image'
+          };
+        });
+
+        return formData;
+      }
+
+      function savePostAsDraft() {
+        const errors = validateForm();
+        if (errors.length > 0) {
+          showFormError(errors.join('<br>'));
+          return;
+        }
+
+        const formData = collectFormData(false);
+        submitPost(formData);
+      }
+
+      function submitPostForReview() {
+        const errors = validateForm();
+        if (errors.length > 0) {
+          showFormError(errors.join('<br>'));
+          return;
+        }
+
+        const formData = collectFormData(true);
+        submitPost(formData);
+      }
+
+      function submitPost(formData) {
+        // Show loading state
+        const submitBtn = event.target;
+        const originalText = submitBtn.textContent;
+        submitBtn.textContent = 'Saving...';
+        submitBtn.disabled = true;
+
+        hideFormMessages();
+
+        // Check if we're in edit mode
+        const isEditing = window.editingPostId ? true : false;
+        const postId = window.editingPostId;
+
+        const successHandler = function(result) {
+          submitBtn.textContent = originalText;
+          submitBtn.disabled = false;
+
+          if (result.success) {
+            showFormSuccess(result.message);
+            console.log(isEditing ? 'Post updated successfully' : 'Post created successfully', ', refreshing calendar...');
+
+            // Close form and reload calendar
+            setTimeout(() => {
+              closePostCreationForm();
+
+              // Force a full calendar reload
+              console.log('Calling loadCalendarData()...');
+              loadCalendarData();
+            }, 1500);
+          } else {
+            showFormError(result.error || (isEditing ? 'Failed to update post' : 'Failed to create post'));
+          }
+        };
+
+        const failureHandler = function(error) {
+          submitBtn.textContent = originalText;
+          submitBtn.disabled = false;
+          showFormError('Error: ' + error.message);
+        };
+
+        if (isEditing) {
+          google.script.run
+            .withSuccessHandler(successHandler)
+            .withFailureHandler(failureHandler)
+            .updatePostFromUI(postId, formData);
+        } else {
+          google.script.run
+            .withSuccessHandler(successHandler)
+            .withFailureHandler(failureHandler)
+            .createPostFromUI(formData);
+        }
+      }
+
+      function resetForm() {
+        document.getElementById('postCreationForm').reset();
+        document.getElementById('subsidiariesContainer').innerHTML = '<span class="form-help">Select a client first</span>';
+        document.getElementById('platformMediaContainer').innerHTML = '';
+        selectedPlatforms = [];
+        document.getElementById('copyCharCount').textContent = '0';
+        hideFormMessages();
+      }
+
+      function showFormError(message) {
+        const errorDiv = document.getElementById('formError');
+        errorDiv.innerHTML = message;
+        errorDiv.classList.add('active');
+        // Scroll to top of modal to show error
+        document.querySelector('.modal-body').scrollTop = 0;
+      }
+
+      function showFormSuccess(message) {
+        const successDiv = document.getElementById('formSuccess');
+        successDiv.innerHTML = message;
+        successDiv.classList.add('active');
+        // Scroll to top of modal to show success
+        document.querySelector('.modal-body').scrollTop = 0;
+      }
+
+      function hideFormMessages() {
+        document.getElementById('formError').classList.remove('active');
+        document.getElementById('formSuccess').classList.remove('active');
       }
     </script>
   </body>
