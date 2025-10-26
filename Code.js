@@ -545,3 +545,20 @@ function validateClientAccess(token) {
     return {success: false, error: 'An error occurred: ' + e.message};
   }
 }
+
+/**
+ * SIMPLE TEST FUNCTION - Generate token for Aloha_Aina@icloud.com
+ * Run this, then check Execution log for the URL
+ */
+function GENERATE_TOKEN_FOR_TESTING() {
+  var result = grantClientAccess('CLT-001', 'Aloha_Aina@icloud.com', 'Full');
+
+  Logger.log('=====================================');
+  Logger.log('TOKEN: ' + result.token);
+  Logger.log('');
+  Logger.log('COPY THIS URL:');
+  Logger.log('https://mjwagner808.github.io/Social-Media-Planner/client-portal.html?token=' + result.token);
+  Logger.log('=====================================');
+
+  return result;
+}

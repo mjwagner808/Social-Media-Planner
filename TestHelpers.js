@@ -14,7 +14,7 @@ function generateTestToken() {
   var result = grantClientAccess('CLT-001', 'Aloha_Aina@icloud.com', 'Full');
 
   if (result.success) {
-    Logger.log('✅ Token generated successfully!');
+    Logger.log('Token generated successfully!');
     Logger.log('');
     Logger.log('Token: ' + result.token);
     Logger.log('');
@@ -24,9 +24,9 @@ function generateTestToken() {
     Logger.log('Apps Script URL (old):');
     Logger.log(result.url);
     Logger.log('');
-    Logger.log('✅ Copy the GitHub Pages URL above and test in an incognito window!');
+    Logger.log('Copy the GitHub Pages URL above and test in an incognito window!');
   } else {
-    Logger.log('❌ Error: ' + result.error);
+    Logger.log('Error: ' + result.error);
   }
 
   return result;
