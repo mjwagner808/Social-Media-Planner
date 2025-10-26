@@ -310,7 +310,7 @@
       loadClientData();
     };
 
-    // Load data from API
+    // Load data from API using JSONP (to avoid CORS issues)
     function loadClientData() {
       // Get token from URL
       const urlParams = new URLSearchParams(window.location.search);
@@ -321,35 +321,41 @@
         return;
       }
 
-      // Call API
-      const apiUrl = API_URL + '?action=getClientData&token=' + encodeURIComponent(token);
+      // Create JSONP callback
+      const callbackName = 'jsonpCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('API Response:', data);
 
-      fetch(apiUrl)
-        .then(response => response.json())
-        .then(data => {
-          console.log('API Response:', data);
+        if (data.success) {
+          clientInfo = data.clientInfo;
+          allPosts = data.posts || [];
+          filteredPosts = allPosts;
 
-          if (data.success) {
-            clientInfo = data.clientInfo;
-            allPosts = data.posts || [];
-            filteredPosts = allPosts;
+          // Update UI
+          document.getElementById('welcomeTitle').textContent = 'Welcome, ' + clientInfo.Client_Name;
+          document.getElementById('clientInfo').textContent = clientInfo.Client_Name;
 
-            // Update UI
-            document.getElementById('welcomeTitle').textContent = 'Welcome, ' + clientInfo.Client_Name;
-            document.getElementById('clientInfo').textContent = clientInfo.Client_Name;
+          showSuccess('Access granted. ' + allPosts.length + ' posts available.');
+          document.getElementById('statusFilters').style.display = 'flex';
 
-            showSuccess('Access granted. ' + allPosts.length + ' posts available.');
-            document.getElementById('statusFilters').style.display = 'flex';
+          renderCalendar();
+        } else {
+          showError(data.error || 'Access denied. Invalid or expired token.');
+        }
 
-            renderCalendar();
-          } else {
-            showError(data.error || 'Access denied. Invalid or expired token.');
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          showError('Failed to load data. Please try again or contact support.');
-        });
+        // Cleanup
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=getClientData&token=' + encodeURIComponent(token) + '&callback=' + callbackName;
+      script.onerror = function() {
+        showError('Failed to load data. Please try again or contact support.');
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
     }
 
     // Show success message

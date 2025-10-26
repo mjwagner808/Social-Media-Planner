@@ -32,10 +32,14 @@ function doGet(e) {
       Logger.log('API request for client data with token: ' + token);
       const validationResult = validateClientAccess(token);
 
-      // Return JSON response
+      // Support JSONP for cross-origin requests
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(validationResult);
+
+      // Return JSONP response
       return ContentService
-        .createTextOutput(JSON.stringify(validationResult))
-        .setMimeType(ContentService.MimeType.JSON);
+        .createTextOutput(callback + '(' + jsonOutput + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
 
     // Check if this is a client portal request (legacy server-side rendering)
