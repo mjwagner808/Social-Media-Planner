@@ -955,21 +955,22 @@
 
       // Client actions section
       html += '<div class="approval-actions">';
+      html += '<h3>' + (status === 'Client_Review' ? 'Your Review' : 'Add Comment') + '</h3>';
 
-      // Show approval buttons only for Client_Review status
+      // For Client_Review, show approval buttons
       if (status === 'Client_Review') {
-        html += '<h3>Your Review</h3>';
         html += '<div class="action-buttons">';
         html += '<button type="button" class="action-btn approve" onclick="approvePost(\'' + postId + '\')">✓ Approve</button>';
         html += '<button type="button" class="action-btn request-changes" onclick="requestChanges(\'' + postId + '\')">✎ Request Changes</button>';
         html += '</div>';
         html += '<div class="comment-section">';
-        html += '<label for="commentText">Comments (optional for approval, required for changes)</label>';
+        html += '<label for="commentText">Comments</label>';
         html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
+        html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment Only</button>';
         html += '</div>';
+        html += '<p style="font-size: 12px; color: #5f6368; margin-top: 8px;">💡 Tip: If approval buttons aren\'t working, use "Submit Comment Only" to share your feedback with the team.</p>';
       } else {
         // For all other statuses, show comment-only section
-        html += '<h3>Add Comment</h3>';
         html += '<div class="comment-section">';
         html += '<label for="commentText">Your Comments</label>';
         html += '<textarea id="commentText" placeholder="Share your thoughts or questions about this post..."></textarea>';

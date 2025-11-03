@@ -635,14 +635,39 @@ function handleClientApproval(token, postId, decision, notes) {
           return {success: false, error: 'Failed to add comment'};
         }
       } else {
-        // No approval record exists - just log the comment (could create a system to store standalone comments)
-        Logger.log('Comment submitted but no approval record found to attach to: ' + notes);
-        // For now, we'll just return success - in production you might want to create a Comments table
+        // No approval record exists - log the comment for manual review
+        Logger.log('========================================');
+        Logger.log('CLIENT COMMENT (No Approval Record)');
+        Logger.log('Post ID: ' + postId);
+        Logger.log('Post Title: ' + post.Post_Title);
+        Logger.log('Client: ' + authorizedClient.Client_ID + ' (' + authorizedClient.Email + ')');
+        Logger.log('Comment: ' + notes);
+        Logger.log('Timestamp: ' + new Date());
+        Logger.log('========================================');
+
+        // Send email notification to internal team
+        var subject = 'Client Comment: ' + post.Post_Title;
+        var body = 'A client has submitted a comment on a post:\n\n' +
+                   'Post: ' + post.Post_Title + ' (ID: ' + postId + ')\n' +
+                   'Client: ' + authorizedClient.Email + '\n' +
+                   'Comment: ' + notes + '\n\n' +
+                   'Note: This post does not have an active approval workflow. ' +
+                   'Please review the comment and follow up as needed.';
+
+        // Get post creator to notify
+        if (post.Created_By) {
+          try {
+            MailApp.sendEmail(post.Created_By, subject, body);
+            Logger.log('Email sent to post creator: ' + post.Created_By);
+          } catch (emailError) {
+            Logger.log('Failed to send email: ' + emailError.message);
+          }
+        }
       }
 
       return {
         success: true,
-        message: 'Comment added successfully'
+        message: 'Comment submitted successfully. The team will review your feedback.'
       };
     }
 
