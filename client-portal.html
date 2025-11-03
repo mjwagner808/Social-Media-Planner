@@ -953,6 +953,9 @@
         html += '</div>';
       }
 
+      // Comment history section (will be loaded dynamically)
+      html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
+
       // Client actions section
       html += '<div class="approval-actions">';
       html += '<h3>' + (status === 'Client_Review' ? 'Your Review' : 'Add Comment') + '</h3>';
@@ -1000,6 +1003,70 @@
 
       // Prevent body scroll when modal is open
       document.body.style.overflow = 'hidden';
+
+      // Load comment history
+      loadCommentHistory(postId);
+    }
+
+    function loadCommentHistory(postId) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      const commentHistoryDiv = document.getElementById('commentHistory');
+
+      if (!commentHistoryDiv) return;
+
+      commentHistoryDiv.innerHTML = '<div style="padding: 12px; text-align: center; color: #5f6368;">Loading comments...</div>';
+
+      // Create JSONP callback
+      const callbackName = 'commentsCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        if (data.success && data.comments && data.comments.length > 0) {
+          let html = '<div style="border-top: 1px solid #dadce0; padding-top: 16px; margin-top: 16px;">';
+          html += '<h3 style="margin-bottom: 12px;">Comment History</h3>';
+
+          data.comments.forEach(function(comment) {
+            const date = new Date(comment.Created_Date);
+            const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            const commentType = comment.Comment_Type || 'General';
+
+            html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #1a73e8;">';
+            html += '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
+            html += '<strong style="color: #1a73e8;">' + escapeHtml(comment.Commenter_Email) + '</strong>';
+            html += '<span style="font-size: 12px; color: #5f6368;">' + dateStr + '</span>';
+            html += '</div>';
+            if (commentType !== 'General') {
+              html += '<div style="display: inline-block; background: #e8f0fe; color: #1967d2; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin-bottom: 6px;">' + commentType.replace(/_/g, ' ') + '</div>';
+            }
+            html += '<div style="color: #202124; white-space: pre-wrap;">' + escapeHtml(comment.Comment_Text) + '</div>';
+            html += '</div>';
+          });
+
+          html += '</div>';
+          commentHistoryDiv.innerHTML = html;
+        } else if (data.success) {
+          commentHistoryDiv.innerHTML = '<div style="padding: 12px; text-align: center; color: #5f6368; font-style: italic;">No comments yet</div>';
+        } else {
+          commentHistoryDiv.innerHTML = '';
+        }
+
+        // Cleanup
+        delete window[callbackName];
+        const script = document.getElementById('commentsScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'commentsScript';
+      script.src = API_URL + '?action=getPostComments' +
+        '&token=' + encodeURIComponent(token) +
+        '&postId=' + encodeURIComponent(postId) +
+        '&callback=' + callbackName;
+      script.onerror = function() {
+        commentHistoryDiv.innerHTML = '';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
     }
 
     function closePostDetail(event) {
