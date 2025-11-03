@@ -251,6 +251,145 @@
       border-radius: 8px;
       margin: 24px 0;
     }
+
+    /* Image preview on hover */
+    .image-preview {
+      position: fixed;
+      z-index: 9999;
+      background: white;
+      border: 2px solid #dadce0;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      padding: 8px;
+      max-width: 300px;
+      max-height: 300px;
+      pointer-events: none;
+      display: none;
+    }
+
+    .image-preview img {
+      width: 100%;
+      height: auto;
+      border-radius: 4px;
+      display: block;
+    }
+
+    .image-preview.carousel-badge::after {
+      content: '📸 Carousel';
+      display: block;
+      text-align: center;
+      font-size: 12px;
+      margin-top: 4px;
+      color: #5f6368;
+    }
+
+    /* Post detail modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      max-width: 800px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      position: relative;
+    }
+
+    .modal-header {
+      padding: 24px;
+      border-bottom: 1px solid #dadce0;
+      position: sticky;
+      top: 0;
+      background: white;
+      z-index: 1;
+    }
+
+    .modal-header h2 {
+      margin: 0 40px 0 0;
+      font-size: 24px;
+      color: #202124;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 32px;
+      color: #5f6368;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: #f1f3f4;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .modal-field {
+      margin-bottom: 20px;
+    }
+
+    .modal-field-label {
+      font-weight: 600;
+      color: #5f6368;
+      font-size: 12px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .modal-field-value {
+      color: #202124;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .modal-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      margin-top: 8px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-badge.Draft { background: #f1f3f4; color: #5f6368; }
+    .status-badge.Internal_Review { background: #fef7e0; color: #ea8600; }
+    .status-badge.Client_Review { background: #fce8e6; color: #c5221f; }
+    .status-badge.Approved { background: #e6f4ea; color: #137333; }
+    .status-badge.Scheduled { background: #e8f0fe; color: #1967d2; }
+    .status-badge.Published { background: #f3e8fd; color: #9334e6; }
   </style>
 </head>
 <body>
@@ -293,6 +432,22 @@
     </div>
   </div>
 
+  <!-- Image preview tooltip -->
+  <div id="imagePreview" class="image-preview"></div>
+
+  <!-- Post detail modal -->
+  <div id="postModal" class="modal-overlay" onclick="closePostDetail(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="modalTitle">Post Details</h2>
+        <button type="button" class="modal-close" onclick="closePostDetail()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Content populated by JavaScript -->
+      </div>
+    </div>
+  </div>
+
   <script>
     // Configuration - UPDATE THIS URL after deployment
     const API_URL = 'https://script.google.com/macros/s/AKfycbwiRbuwQTrj--xfmP7klfZ_TJratdAySuujz3oSZ3-31SgTY0KA5Zsz75BDLBU-sCCV/exec';
@@ -304,11 +459,6 @@
     let currentMonth = new Date().getMonth();
     let currentYear = new Date().getFullYear();
     let currentStatusFilter = 'all';
-
-    // Initialize on load
-    window.onload = function() {
-      loadClientData();
-    };
 
     // Load data from API using JSONP (to avoid CORS issues)
     function loadClientData() {
@@ -407,8 +557,29 @@
             dayPosts.forEach(post => {
               const title = post.Post_Title || 'Untitled';
               const status = (post.Status || 'Draft').replace(/ /g, '_');
-              html += '<div class="post-item ' + status + '" title="' + escapeHtml(title) + '">';
+              const imageUrl = post.image_url || '';
+              const isCarousel = post.is_carousel || false;
+              const postId = post.ID || '';
+
+              html += '<div class="post-item ' + status + '" ';
+              html += 'title="' + escapeHtml(title) + '" ';
+              html += 'data-post-id="' + postId + '" ';
+              if (imageUrl) {
+                html += 'data-image-url="' + escapeHtml(imageUrl) + '" ';
+              }
+              if (isCarousel) {
+                html += 'data-is-carousel="true" ';
+              }
+              html += 'onclick="openPostDetail(\'' + postId + '\')" ';
+              html += 'style="cursor: pointer;">';
+
               html += escapeHtml(title.substring(0, 30)) + (title.length > 30 ? '...' : '');
+
+              // Add carousel badge if applicable
+              if (isCarousel) {
+                html += ' <span style="font-size: 0.8em;">📸</span>';
+              }
+
               html += '</div>';
             });
 
@@ -491,6 +662,152 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    // Image preview on hover
+    function setupImagePreview() {
+      const calendarContainer = document.getElementById('calendarContainer');
+      const preview = document.getElementById('imagePreview');
+
+      calendarContainer.addEventListener('mouseover', function(e) {
+        const postItem = e.target.closest('.post-item[data-image-url]');
+        if (postItem) {
+          const imageUrl = postItem.getAttribute('data-image-url');
+          const isCarousel = postItem.getAttribute('data-is-carousel') === 'true';
+
+          if (imageUrl && !isCarousel) {
+            preview.innerHTML = '<img src="' + escapeHtml(imageUrl) + '" alt="Post preview">';
+            preview.style.display = 'block';
+            updatePreviewPosition(e);
+          } else if (isCarousel) {
+            preview.innerHTML = '<div style="padding: 20px; text-align: center;">📸 Carousel<br><small>Click to view all images</small></div>';
+            preview.classList.add('carousel-badge');
+            preview.style.display = 'block';
+            updatePreviewPosition(e);
+          }
+        }
+      });
+
+      calendarContainer.addEventListener('mousemove', function(e) {
+        const postItem = e.target.closest('.post-item[data-image-url]');
+        if (postItem && preview.style.display === 'block') {
+          updatePreviewPosition(e);
+        }
+      });
+
+      calendarContainer.addEventListener('mouseout', function(e) {
+        const postItem = e.target.closest('.post-item[data-image-url]');
+        if (postItem && !e.relatedTarget?.closest('.post-item[data-image-url]')) {
+          preview.style.display = 'none';
+          preview.classList.remove('carousel-badge');
+        }
+      });
+    }
+
+    function updatePreviewPosition(e) {
+      const preview = document.getElementById('imagePreview');
+      const offset = 20;
+      let x = e.clientX + offset;
+      let y = e.clientY + offset;
+
+      // Keep preview within viewport
+      const previewRect = preview.getBoundingClientRect();
+      if (x + previewRect.width > window.innerWidth) {
+        x = e.clientX - previewRect.width - offset;
+      }
+      if (y + previewRect.height > window.innerHeight) {
+        y = e.clientY - previewRect.height - offset;
+      }
+
+      preview.style.left = x + 'px';
+      preview.style.top = y + 'px';
+    }
+
+    // Post detail modal
+    function openPostDetail(postId) {
+      const post = allPosts.find(p => p.ID === postId);
+      if (!post) return;
+
+      const modal = document.getElementById('postModal');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalBody = document.getElementById('modalBody');
+
+      modalTitle.textContent = post.Post_Title || 'Untitled Post';
+
+      // Build modal content
+      let html = '';
+
+      // Status badge
+      const status = (post.Status || 'Draft').replace(/ /g, '_');
+      html += '<div class="modal-field">';
+      html += '<div class="modal-field-label">Status</div>';
+      html += '<div class="modal-field-value"><span class="status-badge ' + status + '">' + (post.Status || 'Draft') + '</span></div>';
+      html += '</div>';
+
+      // Scheduled date
+      if (post.Scheduled_Date) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Scheduled Date</div>';
+        html += '<div class="modal-field-value">' + new Date(post.Scheduled_Date).toLocaleDateString() + '</div>';
+        html += '</div>';
+      }
+
+      // Post copy
+      if (post.Post_Copy) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Post Copy</div>';
+        html += '<div class="modal-field-value">' + escapeHtml(post.Post_Copy).replace(/\n/g, '<br>') + '</div>';
+        html += '</div>';
+      }
+
+      // Hashtags
+      if (post.Hashtags) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Hashtags</div>';
+        html += '<div class="modal-field-value">' + escapeHtml(post.Hashtags) + '</div>';
+        html += '</div>';
+      }
+
+      // Link URL
+      if (post.Link_URL) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Link</div>';
+        html += '<div class="modal-field-value"><a href="' + escapeHtml(post.Link_URL) + '" target="_blank">' + escapeHtml(post.Link_URL) + '</a></div>';
+        html += '</div>';
+      }
+
+      // Image
+      if (post.image_url && !post.is_carousel) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Media</div>';
+        html += '<div class="modal-field-value"><img src="' + escapeHtml(post.image_url) + '" alt="Post image" class="modal-image"></div>';
+        html += '</div>';
+      } else if (post.is_carousel) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Media</div>';
+        html += '<div class="modal-field-value">📸 Carousel (multiple images)</div>';
+        html += '</div>';
+      }
+
+      modalBody.innerHTML = html;
+      modal.classList.add('active');
+
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePostDetail(event) {
+      if (event && event.target.closest('.modal-content')) return;
+
+      const modal = document.getElementById('postModal');
+      modal.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    // Initialize on page load
+    window.addEventListener('load', function() {
+      setupImagePreview();
+      loadClientData();
+    });
   </script>
 </body>
 </html>
