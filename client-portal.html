@@ -964,6 +964,13 @@
         html += '<button type="button" class="action-btn request-changes" onclick="requestChanges(\'' + postId + '\')">✎ Request Changes</button>';
         html += '</div>';
         html += '<div class="comment-section">';
+        html += '<label for="commentType">Comment Type</label>';
+        html += '<select id="commentType" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
+        html += '<option value="">General Comment</option>';
+        html += '<option value="Question">Question</option>';
+        html += '<option value="Revision_Request">Revision Request</option>';
+        html += '<option value="Approval_Feedback">Approval Feedback</option>';
+        html += '</select>';
         html += '<label for="commentText">Comments</label>';
         html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
         html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment Only</button>';
@@ -972,6 +979,14 @@
       } else {
         // For all other statuses, show comment-only section
         html += '<div class="comment-section">';
+        html += '<label for="commentType">Comment Type</label>';
+        html += '<select id="commentType" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
+        html += '<option value="">General Comment</option>';
+        html += '<option value="Question">Question</option>';
+        html += '<option value="Revision_Request">Revision Request</option>';
+        html += '<option value="Approval_Feedback">Approval Feedback</option>';
+        html += '<option value="Internal_Note">Internal Note</option>';
+        html += '</select>';
         html += '<label for="commentText">Your Comments</label>';
         html += '<textarea id="commentText" placeholder="Share your thoughts or questions about this post..."></textarea>';
         html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment</button>';
@@ -1026,6 +1041,7 @@
 
     function addComment(postId) {
       const comment = document.getElementById('commentText')?.value || '';
+      const commentType = document.getElementById('commentType')?.value || '';
 
       if (!comment.trim()) {
         alert('Please enter a comment before submitting.');
@@ -1034,10 +1050,10 @@
       }
 
       // Submit as a comment (not an approval decision)
-      submitApprovalDecision(postId, 'Comment', comment);
+      submitApprovalDecision(postId, 'Comment', comment, commentType);
     }
 
-    function submitApprovalDecision(postId, decision, notes) {
+    function submitApprovalDecision(postId, decision, notes, commentType) {
       // Get current token
       const urlParams = new URLSearchParams(window.location.search);
       const token = urlParams.get('token');
@@ -1088,6 +1104,7 @@
         '&postId=' + encodeURIComponent(postId) +
         '&decision=' + encodeURIComponent(decision) +
         '&notes=' + encodeURIComponent(notes) +
+        '&commentType=' + encodeURIComponent(commentType || '') +
         '&callback=' + callbackName;
       script.onerror = function() {
         modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>Failed to connect to server. Please check your connection and try again.</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
