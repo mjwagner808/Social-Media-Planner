@@ -66,8 +66,43 @@
     .status-filters {
       display: flex;
       gap: 12px;
-      margin-bottom: 24px;
+      margin-bottom: 16px;
       flex-wrap: wrap;
+    }
+
+    .status-legend {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 24px;
+      display: none;
+    }
+
+    .status-legend h3 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #5f6368;
+      text-transform: uppercase;
+    }
+
+    .legend-items {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
     }
 
     .filter-btn {
@@ -390,6 +425,105 @@
     .status-badge.Approved { background: #e6f4ea; color: #137333; }
     .status-badge.Scheduled { background: #e8f0fe; color: #1967d2; }
     .status-badge.Published { background: #f3e8fd; color: #9334e6; }
+
+    /* Approval actions */
+    .approval-actions {
+      border-top: 1px solid #dadce0;
+      padding-top: 24px;
+      margin-top: 24px;
+    }
+
+    .approval-actions h3 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #202124;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn.approve {
+      background: #34a853;
+      color: white;
+    }
+
+    .action-btn.approve:hover {
+      background: #2d8e47;
+    }
+
+    .action-btn.request-changes {
+      background: #ea4335;
+      color: white;
+    }
+
+    .action-btn.request-changes:hover {
+      background: #d33426;
+    }
+
+    .comment-section {
+      margin-top: 16px;
+    }
+
+    .comment-section label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #5f6368;
+      font-size: 14px;
+    }
+
+    .comment-section textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+
+    .comment-section textarea:focus {
+      outline: none;
+      border-color: #1a73e8;
+    }
+
+    .submit-btn {
+      margin-top: 12px;
+      padding: 10px 24px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .submit-btn:hover {
+      background: #1765cc;
+    }
+
+    .submit-btn:disabled {
+      background: #dadce0;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
@@ -411,6 +545,36 @@
       <button class="filter-btn" onclick="filterByStatus('Approved')">Approved</button>
       <button class="filter-btn" onclick="filterByStatus('Scheduled')">Scheduled</button>
       <button class="filter-btn" onclick="filterByStatus('Published')">Published</button>
+    </div>
+
+    <div class="status-legend" id="statusLegend">
+      <h3>Post Status Colors</h3>
+      <div class="legend-items">
+        <div class="legend-item">
+          <div class="legend-color" style="background: #9aa0a6;"></div>
+          <span>Draft</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #f9ab00;"></div>
+          <span>Internal Review</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #ea4335;"></div>
+          <span>Client Review</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #34a853;"></div>
+          <span>Approved</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #1a73e8;"></div>
+          <span>Scheduled</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #9334e9;"></div>
+          <span>Published</span>
+        </div>
+      </div>
     </div>
 
     <div class="calendar-card">
@@ -487,6 +651,7 @@
 
           showSuccess('Access granted. ' + allPosts.length + ' posts available.');
           document.getElementById('statusFilters').style.display = 'flex';
+          document.getElementById('statusLegend').style.display = 'block';
 
           renderCalendar();
         } else {
@@ -788,6 +953,21 @@
         html += '</div>';
       }
 
+      // Approval actions (only for Client_Review status)
+      if (status === 'Client_Review') {
+        html += '<div class="approval-actions">';
+        html += '<h3>Your Review</h3>';
+        html += '<div class="action-buttons">';
+        html += '<button type="button" class="action-btn approve" onclick="approvePost(\'' + postId + '\')">✓ Approve</button>';
+        html += '<button type="button" class="action-btn request-changes" onclick="requestChanges(\'' + postId + '\')">✎ Request Changes</button>';
+        html += '</div>';
+        html += '<div class="comment-section">';
+        html += '<label for="commentText">Comments (optional for approval, required for changes)</label>';
+        html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
+        html += '</div>';
+        html += '</div>';
+      }
+
       modalBody.innerHTML = html;
       modal.classList.add('active');
 
@@ -801,6 +981,85 @@
       const modal = document.getElementById('postModal');
       modal.classList.remove('active');
       document.body.style.overflow = '';
+    }
+
+    // Approval actions
+    function approvePost(postId) {
+      const comment = document.getElementById('commentText')?.value || '';
+
+      if (!confirm('Are you sure you want to approve this post?')) {
+        return;
+      }
+
+      // Call backend to record approval
+      submitApprovalDecision(postId, 'Approved', comment);
+    }
+
+    function requestChanges(postId) {
+      const comment = document.getElementById('commentText')?.value || '';
+
+      if (!comment.trim()) {
+        alert('Please provide comments explaining what changes are needed.');
+        document.getElementById('commentText').focus();
+        return;
+      }
+
+      if (!confirm('Request changes to this post?')) {
+        return;
+      }
+
+      // Call backend to record rejection/changes
+      submitApprovalDecision(postId, 'Changes_Requested', comment);
+    }
+
+    function submitApprovalDecision(postId, decision, notes) {
+      // Get current token
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+
+      // Show loading state
+      const modal = document.getElementById('postModal');
+      const modalBody = document.getElementById('modalBody');
+      const originalContent = modalBody.innerHTML;
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Submitting your decision...</p></div>';
+
+      // Create JSONP callback for approval submission
+      const callbackName = 'approvalCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Approval API Response:', data);
+
+        if (data.success) {
+          // Success - show message and reload
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #34a853; margin-bottom: 16px;">✓ Success!</h3><p>' +
+            (decision === 'Approved' ? 'Post approved successfully.' : 'Your change request has been sent.') +
+            '</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
+        } else {
+          // Error - show message and allow retry
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>' +
+            (data.error || 'Failed to submit your decision. Please try again.') +
+            '</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
+        }
+
+        // Cleanup
+        delete window[callbackName];
+        const script = document.getElementById('approvalScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'approvalScript';
+      script.src = API_URL + '?action=submitClientApproval' +
+        '&token=' + encodeURIComponent(token) +
+        '&postId=' + encodeURIComponent(postId) +
+        '&decision=' + encodeURIComponent(decision) +
+        '&notes=' + encodeURIComponent(notes) +
+        '&callback=' + callbackName;
+      script.onerror = function() {
+        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>Failed to connect to server. Please check your connection and try again.</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
     }
 
     // Initialize on page load

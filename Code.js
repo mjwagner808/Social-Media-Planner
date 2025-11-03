@@ -29,16 +29,47 @@ function doGet(e) {
 
     if (action === 'getClientData' && token) {
       // API endpoint - returns JSON data for external client portal
-      Logger.log('API request for client data with token: ' + token);
+      Logger.log('✅ JSONP API ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Callback: ' + (e.parameter.callback || 'callback'));
+
       const validationResult = validateClientAccess(token);
+      Logger.log('Validation result: ' + JSON.stringify(validationResult));
 
       // Support JSONP for cross-origin requests
       const callback = e.parameter.callback || 'callback';
       const jsonOutput = JSON.stringify(validationResult);
+      const response = callback + '(' + jsonOutput + ')';
+
+      Logger.log('Response length: ' + response.length + ' chars');
+      Logger.log('Response preview: ' + response.substring(0, 100));
 
       // Return JSONP response
       return ContentService
-        .createTextOutput(callback + '(' + jsonOutput + ')')
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Client approval submission endpoint
+    if (action === 'submitClientApproval' && token) {
+      Logger.log('✅ CLIENT APPROVAL SUBMISSION ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+      Logger.log('Decision: ' + e.parameter.decision);
+
+      const result = handleClientApproval(
+        token,
+        e.parameter.postId,
+        e.parameter.decision,
+        e.parameter.notes || ''
+      );
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
 
@@ -551,6 +582,79 @@ function validateClientAccess(token) {
 }
 
 /**
+ * Handle client approval submission from external portal
+ * @param {string} token - Client access token
+ * @param {string} postId - Post ID being reviewed
+ * @param {string} decision - 'Approved' or 'Changes_Requested'
+ * @param {string} notes - Client comments
+ * @returns {Object} - {success: true/false, message: string}
+ */
+function handleClientApproval(token, postId, decision, notes) {
+  try {
+    Logger.log('=== HANDLING CLIENT APPROVAL ===');
+    Logger.log('Token: ' + token);
+    Logger.log('Post ID: ' + postId);
+    Logger.log('Decision: ' + decision);
+    Logger.log('Notes: ' + notes);
+
+    // Validate token
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
+
+    // Get the post to verify it belongs to this client
+    const post = getPostById(postId);
+    if (!post) {
+      return {success: false, error: 'Post not found'};
+    }
+
+    if (post.Client_ID !== authorizedClient.Client_ID) {
+      return {success: false, error: 'Access denied - this post does not belong to your account'};
+    }
+
+    Logger.log('Post validated: ' + post.Post_Title);
+
+    // Find the client approval record for this post
+    const approvals = _readSheetAsObjects_('Post_Approvals', {
+      filterFn: function(a) {
+        return a.Post_ID === postId && a.Approval_Stage === 'Client_Review';
+      }
+    });
+
+    if (!approvals || approvals.length === 0) {
+      return {success: false, error: 'No approval record found for this post'};
+    }
+
+    // Update the approval record
+    const approval = approvals[0];
+    const approvalStatus = decision === 'Approved' ? 'Approved' : 'Changes_Requested';
+
+    Logger.log('Updating approval record: ' + approval.ID + ' to status: ' + approvalStatus);
+
+    const updateResult = recordApprovalDecision(approval.ID, approvalStatus, notes);
+
+    if (!updateResult.success) {
+      return {success: false, error: 'Failed to record approval decision'};
+    }
+
+    Logger.log('✅ Client approval recorded successfully');
+
+    return {
+      success: true,
+      message: decision === 'Approved' ? 'Post approved successfully' : 'Change request submitted successfully'
+    };
+
+  } catch (e) {
+    Logger.log('ERROR handling client approval: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: 'An error occurred: ' + e.message};
+  }
+}
+
+/**
  * SIMPLE TEST FUNCTION - Generate token for Aloha_Aina@icloud.com
  * Run this, then check Execution log for the URL
  */
@@ -565,4 +669,208 @@ function GENERATE_TOKEN_FOR_TESTING() {
   Logger.log('=====================================');
 
   return result;
+}
+
+/**
+ * DIAGNOSTIC FUNCTION - Test JSONP endpoint locally
+ * This simulates what happens when the external HTML calls the API
+ * Run this to verify JSONP code works in Apps Script environment
+ */
+function TEST_JSONP_ENDPOINT() {
+  Logger.log('=== TESTING JSONP ENDPOINT ===');
+
+  // Use the existing test token
+  var token = 'QJeLmNN8FzTZhiwEYGvJAuwyBwQNbR';
+
+  // Simulate the request that comes from client-portal.html
+  var mockRequest = {
+    parameter: {
+      action: 'getClientData',
+      token: token,
+      callback: 'testCallback'
+    }
+  };
+
+  Logger.log('Simulating request with parameters:');
+  Logger.log(JSON.stringify(mockRequest.parameter));
+
+  // Call doGet with mock request
+  var response = doGet(mockRequest);
+
+  Logger.log('');
+  Logger.log('Response type: ' + typeof response);
+  Logger.log('Response MIME type: ' + (response.getMimeType ? response.getMimeType() : 'N/A'));
+
+  // Get the actual content
+  var content = response.getContent();
+  Logger.log('');
+  Logger.log('Response content length: ' + content.length + ' characters');
+  Logger.log('');
+  Logger.log('First 200 characters of response:');
+  Logger.log(content.substring(0, 200));
+  Logger.log('');
+
+  // Check if it looks like valid JSONP
+  if (content.indexOf('testCallback(') === 0) {
+    Logger.log('✅ JSONP FORMAT CORRECT - Response starts with callback function');
+  } else {
+    Logger.log('❌ JSONP FORMAT INCORRECT - Response does not start with callback');
+  }
+
+  // Check MIME type
+  if (response.getMimeType() === ContentService.MimeType.JAVASCRIPT) {
+    Logger.log('✅ MIME TYPE CORRECT - Set to JavaScript');
+  } else {
+    Logger.log('❌ MIME TYPE INCORRECT - Not set to JavaScript');
+  }
+
+  Logger.log('');
+  Logger.log('=== TEST COMPLETE ===');
+
+  return {
+    mimeType: response.getMimeType(),
+    contentLength: content.length,
+    preview: content.substring(0, 200),
+    isValidJSONP: content.indexOf('testCallback(') === 0
+  };
+}
+
+/**
+ * DIAGNOSTIC FUNCTION - Audit all client access tokens
+ * Shows all tokens in Authorized_Clients sheet with their status
+ * Use this to troubleshoot token issues before they affect real clients
+ */
+function AUDIT_CLIENT_TOKENS() {
+  Logger.log('=== AUDITING CLIENT ACCESS TOKENS ===');
+  Logger.log('');
+
+  try {
+    var sheet = _getSheet_('Authorized_Clients');
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+
+    Logger.log('Total records in Authorized_Clients sheet: ' + (data.length - 1));
+    Logger.log('');
+    Logger.log('Column headers: ' + headers.join(', '));
+    Logger.log('');
+    Logger.log('='.repeat(100));
+
+    // Find column indices
+    var idIndex = headers.indexOf('ID');
+    var clientIdIndex = headers.indexOf('Client_ID');
+    var emailIndex = headers.indexOf('Email');
+    var tokenIndex = headers.indexOf('Access_Token');
+    var statusIndex = headers.indexOf('Status');
+    var createdDateIndex = headers.indexOf('Created_Date');
+    var lastLoginIndex = headers.indexOf('Last_Login');
+    var expiresIndex = headers.indexOf('Token_Expires');
+
+    if (data.length === 1) {
+      Logger.log('⚠️  NO TOKENS FOUND - Sheet is empty (only headers)');
+      return {success: false, error: 'No tokens found'};
+    }
+
+    var activeCount = 0;
+    var inactiveCount = 0;
+    var expiredCount = 0;
+
+    // Loop through all records
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var id = row[idIndex];
+      var clientId = row[clientIdIndex];
+      var email = row[emailIndex];
+      var token = row[tokenIndex];
+      var status = row[statusIndex];
+      var createdDate = row[createdDateIndex];
+      var lastLogin = row[lastLoginIndex];
+      var expires = row[expiresIndex];
+
+      Logger.log('Record #' + i);
+      Logger.log('  ID: ' + id);
+      Logger.log('  Client: ' + clientId);
+      Logger.log('  Email: ' + email);
+      Logger.log('  Token: ' + token);
+      Logger.log('  Status: ' + status);
+      Logger.log('  Created: ' + createdDate);
+      Logger.log('  Last Login: ' + (lastLogin || 'Never'));
+      Logger.log('  Expires: ' + (expires || 'No expiration'));
+
+      // Check if expired
+      var isExpired = false;
+      if (expires) {
+        var expiryDate = new Date(expires);
+        if (expiryDate < new Date()) {
+          isExpired = true;
+          expiredCount++;
+          Logger.log('  ⚠️  EXPIRED on ' + expiryDate);
+        }
+      }
+
+      // Count by status
+      if (status === 'Active') {
+        if (!isExpired) {
+          activeCount++;
+          Logger.log('  ✅ VALID - Active and not expired');
+        }
+      } else {
+        inactiveCount++;
+        Logger.log('  ❌ INACTIVE - Status is not Active');
+      }
+
+      Logger.log('-'.repeat(100));
+    }
+
+    Logger.log('');
+    Logger.log('=== SUMMARY ===');
+    Logger.log('Total tokens: ' + (data.length - 1));
+    Logger.log('✅ Active & Valid: ' + activeCount);
+    Logger.log('❌ Inactive: ' + inactiveCount);
+    Logger.log('⚠️  Expired: ' + expiredCount);
+    Logger.log('');
+
+    // Test the specific tokens we've been using
+    Logger.log('=== TESTING SPECIFIC TOKENS ===');
+    var testTokens = [
+      'QJeLmNN8FzTZhiwEYGvJAuwyBwQNbR',  // Old token
+      'dy3a4nNN8FsTZH1uEfVGJJauyjWoXMbR'  // New token
+    ];
+
+    testTokens.forEach(function(testToken) {
+      Logger.log('');
+      Logger.log('Testing token: ' + testToken);
+      var found = false;
+
+      for (var j = 1; j < data.length; j++) {
+        if (data[j][tokenIndex] === testToken) {
+          found = true;
+          Logger.log('  ✅ FOUND in sheet');
+          Logger.log('  Status: ' + data[j][statusIndex]);
+          Logger.log('  Client: ' + data[j][clientIdIndex]);
+          Logger.log('  Email: ' + data[j][emailIndex]);
+          break;
+        }
+      }
+
+      if (!found) {
+        Logger.log('  ❌ NOT FOUND in Authorized_Clients sheet');
+      }
+    });
+
+    Logger.log('');
+    Logger.log('=== AUDIT COMPLETE ===');
+
+    return {
+      success: true,
+      totalTokens: data.length - 1,
+      active: activeCount,
+      inactive: inactiveCount,
+      expired: expiredCount
+    };
+
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
 }
