@@ -953,9 +953,11 @@
         html += '</div>';
       }
 
-      // Approval actions (only for Client_Review status)
+      // Client actions section
+      html += '<div class="approval-actions">';
+
+      // Show approval buttons only for Client_Review status
       if (status === 'Client_Review') {
-        html += '<div class="approval-actions">';
         html += '<h3>Your Review</h3>';
         html += '<div class="action-buttons">';
         html += '<button type="button" class="action-btn approve" onclick="approvePost(\'' + postId + '\')">✓ Approve</button>';
@@ -965,8 +967,17 @@
         html += '<label for="commentText">Comments (optional for approval, required for changes)</label>';
         html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
         html += '</div>';
+      } else {
+        // For all other statuses, show comment-only section
+        html += '<h3>Add Comment</h3>';
+        html += '<div class="comment-section">';
+        html += '<label for="commentText">Your Comments</label>';
+        html += '<textarea id="commentText" placeholder="Share your thoughts or questions about this post..."></textarea>';
+        html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment</button>';
         html += '</div>';
       }
+
+      html += '</div>';
 
       modalBody.innerHTML = html;
       modal.classList.add('active');
@@ -1012,6 +1023,19 @@
       submitApprovalDecision(postId, 'Changes_Requested', comment);
     }
 
+    function addComment(postId) {
+      const comment = document.getElementById('commentText')?.value || '';
+
+      if (!comment.trim()) {
+        alert('Please enter a comment before submitting.');
+        document.getElementById('commentText').focus();
+        return;
+      }
+
+      // Submit as a comment (not an approval decision)
+      submitApprovalDecision(postId, 'Comment', comment);
+    }
+
     function submitApprovalDecision(postId, decision, notes) {
       // Get current token
       const urlParams = new URLSearchParams(window.location.search);
@@ -1030,8 +1054,17 @@
 
         if (data.success) {
           // Success - show message and reload
+          let successMessage = 'Success!';
+          if (decision === 'Approved') {
+            successMessage = 'Post approved successfully.';
+          } else if (decision === 'Changes_Requested') {
+            successMessage = 'Your change request has been sent.';
+          } else if (decision === 'Comment') {
+            successMessage = 'Your comment has been added.';
+          }
+
           modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #34a853; margin-bottom: 16px;">✓ Success!</h3><p>' +
-            (decision === 'Approved' ? 'Post approved successfully.' : 'Your change request has been sent.') +
+            successMessage +
             '</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
         } else {
           // Error - show message and allow retry

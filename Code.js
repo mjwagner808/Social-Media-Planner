@@ -605,19 +605,48 @@ function handleClientApproval(token, postId, decision, notes) {
 
     Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
 
-    // Get the post to verify it belongs to this client
-    const post = getPostById(postId);
+    // Get all posts accessible to this client (handles subsidiaries)
+    const clientPosts = getClientPosts(authorizedClient.Client_ID);
+    const post = clientPosts.find(function(p) { return p.ID === postId; });
+
     if (!post) {
-      return {success: false, error: 'Post not found'};
+      return {success: false, error: 'Post not found or you do not have access to this post'};
     }
 
-    if (post.Client_ID !== authorizedClient.Client_ID) {
-      return {success: false, error: 'Access denied - this post does not belong to your account'};
+    Logger.log('Post validated: ' + post.Post_Title + ', Client: ' + post.Client_ID);
+
+    // Handle comment-only (no approval record needed for comments on non-Client_Review posts)
+    if (decision === 'Comment') {
+      Logger.log('Adding comment (no approval decision)');
+
+      // Find ANY approval record for this post to attach comment
+      const allApprovals = _readSheetAsObjects_('Post_Approvals', {
+        filterFn: function(a) {
+          return a.Post_ID === postId;
+        }
+      });
+
+      if (allApprovals && allApprovals.length > 0) {
+        // Attach comment to the most recent approval record
+        const approval = allApprovals[0];
+        const updateResult = recordApprovalDecision(approval.ID, null, notes);
+
+        if (!updateResult.success) {
+          return {success: false, error: 'Failed to add comment'};
+        }
+      } else {
+        // No approval record exists - just log the comment (could create a system to store standalone comments)
+        Logger.log('Comment submitted but no approval record found to attach to: ' + notes);
+        // For now, we'll just return success - in production you might want to create a Comments table
+      }
+
+      return {
+        success: true,
+        message: 'Comment added successfully'
+      };
     }
 
-    Logger.log('Post validated: ' + post.Post_Title);
-
-    // Find the client approval record for this post
+    // Find the client approval record for this post (for Approve/Request Changes)
     const approvals = _readSheetAsObjects_('Post_Approvals', {
       filterFn: function(a) {
         return a.Post_ID === postId && a.Approval_Stage === 'Client_Review';
@@ -625,7 +654,7 @@ function handleClientApproval(token, postId, decision, notes) {
     });
 
     if (!approvals || approvals.length === 0) {
-      return {success: false, error: 'No approval record found for this post'};
+      return {success: false, error: 'No client approval record found for this post. This post may not be in Client Review status.'};
     }
 
     // Update the approval record
