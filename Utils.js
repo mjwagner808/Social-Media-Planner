@@ -24,8 +24,11 @@ function generateId(prefix) {
     case 'UC': sheetName = 'User_Clients'; break;
     case 'POST': sheetName = 'Posts'; break;
     case 'PP': sheetName = 'Post_Platforms'; break;
-    case 'APR': sheetName = 'Post_Approvals'; break;
-    case 'CMT': sheetName = 'Comments'; break;
+    case 'PA': sheetName = 'Post_Approvals'; break;  // FIX: was 'APR', should be 'PA'
+    case 'APR': sheetName = 'Post_Approvals'; break; // Keep for backwards compatibility
+    case 'COM': sheetName = 'Comments'; break;       // FIX: was 'CMT', should be 'COM'
+    case 'CMT': sheetName = 'Comments'; break;       // Keep for backwards compatibility
+    case 'AC': sheetName = 'Authorized_Clients'; break;
     case 'LIB': sheetName = 'Content_Library'; break;
     case 'PLT': sheetName = 'Platforms'; break;
     case 'CAT': sheetName = 'Content_Categories'; break;

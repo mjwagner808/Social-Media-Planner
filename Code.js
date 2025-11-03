@@ -50,23 +50,47 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
 
+    // Get comments for a post endpoint
+    if (action === 'getPostComments' && token) {
+      Logger.log('✅ GET POST COMMENTS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+
+      const result = getPostCommentsForClient(token, e.parameter.postId);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
     // Client approval submission endpoint
+    Logger.log('Checking submitClientApproval: action=' + action + ', token=' + token);
     if (action === 'submitClientApproval' && token) {
       Logger.log('✅ CLIENT APPROVAL SUBMISSION ENDPOINT HIT');
       Logger.log('Token: ' + token);
       Logger.log('Post ID: ' + e.parameter.postId);
       Logger.log('Decision: ' + e.parameter.decision);
+      Logger.log('Notes: ' + (e.parameter.notes || ''));
 
       const result = handleClientApproval(
         token,
         e.parameter.postId,
         e.parameter.decision,
-        e.parameter.notes || ''
+        e.parameter.notes || '',
+        e.parameter.commentType || ''
       );
+
+      Logger.log('handleClientApproval returned: ' + JSON.stringify(result));
 
       const callback = e.parameter.callback || 'callback';
       const jsonOutput = JSON.stringify(result);
       const response = callback + '(' + jsonOutput + ')';
+
+      Logger.log('Returning JSONP response with callback: ' + callback);
 
       return ContentService
         .createTextOutput(response)
@@ -589,13 +613,14 @@ function validateClientAccess(token) {
  * @param {string} notes - Client comments
  * @returns {Object} - {success: true/false, message: string}
  */
-function handleClientApproval(token, postId, decision, notes) {
+function handleClientApproval(token, postId, decision, notes, commentType) {
   try {
     Logger.log('=== HANDLING CLIENT APPROVAL ===');
     Logger.log('Token: ' + token);
     Logger.log('Post ID: ' + postId);
     Logger.log('Decision: ' + decision);
     Logger.log('Notes: ' + notes);
+    Logger.log('Comment Type: ' + commentType);
 
     // Validate token
     const authorizedClient = validateClientToken(token);
@@ -619,50 +644,54 @@ function handleClientApproval(token, postId, decision, notes) {
     if (decision === 'Comment') {
       Logger.log('Adding comment (no approval decision)');
 
-      // Find ANY approval record for this post to attach comment
-      const allApprovals = _readSheetAsObjects_('Post_Approvals', {
-        filterFn: function(a) {
-          return a.Post_ID === postId;
-        }
-      });
+      // Add comment to Comments sheet
+      const commentResult = addComment(
+        postId,
+        authorizedClient.Email,
+        'Client',
+        notes,
+        post,
+        commentType
+      );
 
-      if (allApprovals && allApprovals.length > 0) {
-        // Attach comment to the most recent approval record
-        const approval = allApprovals[0];
-        const updateResult = recordApprovalDecision(approval.ID, null, notes);
+      if (!commentResult.success) {
+        Logger.log('Failed to add comment: ' + commentResult.error);
+        return {success: false, error: 'Failed to save comment: ' + commentResult.error};
+      }
 
-        if (!updateResult.success) {
-          return {success: false, error: 'Failed to add comment'};
+      Logger.log('Comment saved with ID: ' + commentResult.commentId);
+
+      // ALWAYS send email notification when client comments (regardless of approval record existence)
+      Logger.log('========================================');
+      Logger.log('CLIENT COMMENT RECEIVED');
+      Logger.log('Post ID: ' + postId);
+      Logger.log('Post Title: ' + post.Post_Title);
+      Logger.log('Client: ' + authorizedClient.Client_ID + ' (' + authorizedClient.Email + ')');
+      Logger.log('Comment: ' + notes);
+      Logger.log('Timestamp: ' + new Date());
+      Logger.log('========================================');
+
+      // Send email notification to internal team
+      var subject = 'Client Comment: ' + post.Post_Title;
+      var body = 'A client has submitted a comment on a post:\n\n' +
+                 'Post: ' + post.Post_Title + ' (ID: ' + postId + ')\n' +
+                 'Client: ' + authorizedClient.Email + '\n' +
+                 'Post Status: ' + post.Status + '\n' +
+                 'Comment: ' + notes + '\n\n' +
+                 'Please review the comment and follow up as needed.';
+
+      // Get post creator to notify
+      if (post.Created_By) {
+        try {
+          Logger.log('Sending email to post creator: ' + post.Created_By);
+          MailApp.sendEmail(post.Created_By, subject, body);
+          Logger.log('✅ Email sent successfully to: ' + post.Created_By);
+        } catch (emailError) {
+          Logger.log('❌ Failed to send email: ' + emailError.message);
+          Logger.log('Stack: ' + emailError.stack);
         }
       } else {
-        // No approval record exists - log the comment for manual review
-        Logger.log('========================================');
-        Logger.log('CLIENT COMMENT (No Approval Record)');
-        Logger.log('Post ID: ' + postId);
-        Logger.log('Post Title: ' + post.Post_Title);
-        Logger.log('Client: ' + authorizedClient.Client_ID + ' (' + authorizedClient.Email + ')');
-        Logger.log('Comment: ' + notes);
-        Logger.log('Timestamp: ' + new Date());
-        Logger.log('========================================');
-
-        // Send email notification to internal team
-        var subject = 'Client Comment: ' + post.Post_Title;
-        var body = 'A client has submitted a comment on a post:\n\n' +
-                   'Post: ' + post.Post_Title + ' (ID: ' + postId + ')\n' +
-                   'Client: ' + authorizedClient.Email + '\n' +
-                   'Comment: ' + notes + '\n\n' +
-                   'Note: This post does not have an active approval workflow. ' +
-                   'Please review the comment and follow up as needed.';
-
-        // Get post creator to notify
-        if (post.Created_By) {
-          try {
-            MailApp.sendEmail(post.Created_By, subject, body);
-            Logger.log('Email sent to post creator: ' + post.Created_By);
-          } catch (emailError) {
-            Logger.log('Failed to send email: ' + emailError.message);
-          }
-        }
+        Logger.log('⚠️ No post creator email found - cannot send notification');
       }
 
       return {
@@ -672,9 +701,10 @@ function handleClientApproval(token, postId, decision, notes) {
     }
 
     // Find the client approval record for this post (for Approve/Request Changes)
+    // Accept both 'Client_Review' and 'Client' stage names for compatibility
     const approvals = _readSheetAsObjects_('Post_Approvals', {
       filterFn: function(a) {
-        return a.Post_ID === postId && a.Approval_Stage === 'Client_Review';
+        return a.Post_ID === postId && (a.Approval_Stage === 'Client_Review' || a.Approval_Stage === 'Client');
       }
     });
 
@@ -687,11 +717,25 @@ function handleClientApproval(token, postId, decision, notes) {
     const approvalStatus = decision === 'Approved' ? 'Approved' : 'Changes_Requested';
 
     Logger.log('Updating approval record: ' + approval.ID + ' to status: ' + approvalStatus);
+    Logger.log('Approver email: ' + authorizedClient.Email);
 
-    const updateResult = recordApprovalDecision(approval.ID, approvalStatus, notes);
+    const updateResult = recordApprovalDecision(approval.ID, approvalStatus, notes, authorizedClient.Email);
 
     if (!updateResult.success) {
       return {success: false, error: 'Failed to record approval decision'};
+    }
+
+    // Also save to Comments sheet for visibility
+    if (notes && notes.trim()) {
+      const commentResult = addComment(
+        postId,
+        authorizedClient.Email,
+        'Client',
+        notes,
+        post,
+        decision === 'Approved' ? 'Approval_Feedback' : 'Revision_Request'
+      );
+      Logger.log('Comment saved to Comments sheet: ' + (commentResult.success ? commentResult.commentId : commentResult.error));
     }
 
     Logger.log('✅ Client approval recorded successfully');
@@ -723,6 +767,498 @@ function GENERATE_TOKEN_FOR_TESTING() {
   Logger.log('=====================================');
 
   return result;
+}
+
+/**
+ * DIAGNOSTIC - Check why post status isn't updating after approval
+ * Run this with a Post ID to see approval workflow state
+ * Usage: DIAGNOSE_POST_STATUS('POST-012') or just DIAGNOSE_POST_STATUS() to use default
+ */
+function DIAGNOSE_POST_STATUS(postId) {
+  // Default to POST-012 if no parameter provided
+  if (!postId) {
+    postId = 'POST-012';
+    Logger.log('No Post ID provided, using default: ' + postId);
+  }
+
+  Logger.log('=== DIAGNOSING POST STATUS FOR: ' + postId + ' ===');
+
+  // Get post current status
+  var posts = _readSheetAsObjects_('Posts', {
+    filterFn: function(p) { return p.ID === postId; }
+  });
+
+  if (posts.length === 0) {
+    Logger.log('❌ Post not found: ' + postId);
+    Logger.log('Make sure the Post ID is correct (e.g., POST-012)');
+    Logger.log('Available posts can be found in the Posts sheet');
+    return;
+  }
+
+  var post = posts[0];
+  Logger.log('Current Post Status: ' + post.Status);
+
+  // Get all approvals for this post
+  var allApprovals = _readSheetAsObjects_('Post_Approvals', {
+    filterFn: function(a) { return a.Post_ID === postId; }
+  });
+
+  Logger.log('Total approval records: ' + allApprovals.length);
+
+  allApprovals.forEach(function(approval) {
+    Logger.log('  - ' + approval.Approval_Stage + ': ' + approval.Approval_Status + ' (ID: ' + approval.ID + ')');
+  });
+
+  // Check internal approvals
+  var internalApprovals = allApprovals.filter(function(a) {
+    return a.Approval_Stage === 'Internal_Review' || a.Approval_Stage === 'Internal';
+  });
+
+  var clientApprovals = allApprovals.filter(function(a) {
+    return a.Approval_Stage === 'Client_Review' || a.Approval_Stage === 'Client';
+  });
+
+  Logger.log('');
+  Logger.log('Internal approvals: ' + internalApprovals.length);
+  Logger.log('Client approvals: ' + clientApprovals.length);
+
+  var allInternalApproved = internalApprovals.length > 0 && internalApprovals.every(function(a) {
+    return a.Approval_Status === 'Approved';
+  });
+
+  var allClientApproved = clientApprovals.length > 0 && clientApprovals.every(function(a) {
+    return a.Approval_Status === 'Approved';
+  });
+
+  Logger.log('All internal approved: ' + allInternalApproved);
+  Logger.log('All client approved: ' + allClientApproved);
+
+  Logger.log('');
+  Logger.log('EXPECTED OUTCOME:');
+  if (allInternalApproved && allClientApproved) {
+    Logger.log('✅ Should update to: Approved');
+  } else if (allInternalApproved && clientApprovals.length === 0) {
+    Logger.log('⏳ Should remain: Internal_Review (waiting for client approval)');
+  } else {
+    Logger.log('⏳ Still awaiting approvals');
+  }
+}
+
+/**
+ * TEST FUNCTION - Simulate client comment submission
+ * Run this directly in Apps Script to test the comment flow
+ */
+function TEST_COMMENT_SUBMISSION() {
+  Logger.log('=== TESTING COMMENT SUBMISSION ===');
+
+  // Use the active test token
+  var token = 'dy3a4nNN8FsTZH1uEfVGJJauyjWoXMbR';
+  var postId = 'POST-019'; // HIMI eblast: Marine...
+  var decision = 'Comment';
+  var notes = 'This is a test comment from the TEST_COMMENT_SUBMISSION function';
+
+  Logger.log('Token: ' + token);
+  Logger.log('Post ID: ' + postId);
+  Logger.log('Decision: ' + decision);
+  Logger.log('Notes: ' + notes);
+  Logger.log('');
+
+  var result = handleClientApproval(token, postId, decision, notes);
+
+  Logger.log('');
+  Logger.log('=== RESULT ===');
+  Logger.log(JSON.stringify(result, null, 2));
+
+  return result;
+}
+
+/**
+ * SIMPLE EMAIL TEST - Test if MailApp is working at all
+ * Run this to verify email functionality
+ */
+function TEST_SIMPLE_EMAIL() {
+  Logger.log('=== TESTING EMAIL FUNCTIONALITY ===');
+
+  var currentUser = Session.getActiveUser().getEmail();
+  Logger.log('Script is running as: ' + currentUser);
+  Logger.log('Effective user: ' + Session.getEffectiveUser().getEmail());
+
+  // Check email quota
+  var quotaRemaining = MailApp.getRemainingDailyQuota();
+  Logger.log('Remaining daily email quota: ' + quotaRemaining);
+
+  var recipient = 'mj.wagner@finnpartners.com';
+  var subject = 'Test Email from Social Media Planner App';
+  var body = 'This is a test email sent at ' + new Date() + '\n\n' +
+             'If you receive this, email functionality is working.\n\n' +
+             'Script running as: ' + currentUser;
+
+  try {
+    Logger.log('Attempting to send email to: ' + recipient);
+    MailApp.sendEmail(recipient, subject, body);
+    Logger.log('✅ Email sent successfully (according to MailApp)');
+    Logger.log('Check your inbox at: ' + recipient);
+    Logger.log('Also check spam/junk folders');
+    Logger.log('Quota remaining after send: ' + MailApp.getRemainingDailyQuota());
+    return {success: true, message: 'Email sent'};
+  } catch (e) {
+    Logger.log('❌ Error sending email: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * TEST EMAIL TO EXTERNAL ADDRESS
+ * Test sending to the client email (non-company address)
+ */
+function TEST_EMAIL_TO_CLIENT() {
+  Logger.log('=== TESTING EMAIL TO EXTERNAL ADDRESS ===');
+
+  var quotaRemaining = MailApp.getRemainingDailyQuota();
+  Logger.log('Remaining daily email quota: ' + quotaRemaining);
+
+  var recipient = 'Aloha_Aina@icloud.com';
+  var subject = 'Test Email from Social Media Planner - Please Confirm Receipt';
+  var body = 'This is a test email from your Social Media Planner app.\n\n' +
+             'Sent at: ' + new Date() + '\n\n' +
+             'If you receive this email, please let MJ know!\n\n' +
+             'This confirms that email notifications are working correctly.';
+
+  try {
+    Logger.log('Attempting to send email to: ' + recipient);
+    MailApp.sendEmail(recipient, subject, body);
+    Logger.log('✅ Email sent successfully to external address');
+    Logger.log('Quota remaining after send: ' + MailApp.getRemainingDailyQuota());
+    return {success: true, message: 'Email sent to ' + recipient};
+  } catch (e) {
+    Logger.log('❌ Error sending email: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION - Create Comments sheet
+ * Run this ONCE to create the Comments sheet with proper structure
+ */
+function CREATE_COMMENTS_SHEET() {
+  Logger.log('=== CREATING COMMENTS SHEET ===');
+
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+    // Check if Comments sheet already exists
+    var existingSheet = ss.getSheetByName('Comments');
+    if (existingSheet) {
+      Logger.log('Comments sheet already exists');
+      return {success: false, error: 'Comments sheet already exists. Delete it first if you want to recreate it.'};
+    }
+
+    // Create new sheet
+    var sheet = ss.insertSheet('Comments');
+
+    // Set up headers
+    var headers = [
+      'ID',              // Comment ID (COM-001, COM-002, etc.)
+      'Post_ID',         // Link to Posts sheet
+      'Commenter_Email', // Who made the comment
+      'Commenter_Type',  // 'Client' or 'Internal'
+      'Comment_Text',    // The actual comment
+      'Created_Date',    // When the comment was made
+      'Post_Title',      // Denormalized for easy viewing
+      'Post_Status'      // Post status at time of comment
+    ];
+
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+    // Format header row
+    sheet.getRange(1, 1, 1, headers.length)
+      .setFontWeight('bold')
+      .setBackground('#4285f4')
+      .setFontColor('#ffffff');
+
+    // Set column widths
+    sheet.setColumnWidth(1, 100);  // ID
+    sheet.setColumnWidth(2, 100);  // Post_ID
+    sheet.setColumnWidth(3, 200);  // Commenter_Email
+    sheet.setColumnWidth(4, 100);  // Commenter_Type
+    sheet.setColumnWidth(5, 400);  // Comment_Text
+    sheet.setColumnWidth(6, 150);  // Created_Date
+    sheet.setColumnWidth(7, 250);  // Post_Title
+    sheet.setColumnWidth(8, 120);  // Post_Status
+
+    // Freeze header row
+    sheet.setFrozenRows(1);
+
+    Logger.log('✅ Comments sheet created successfully');
+
+    return {success: true, message: 'Comments sheet created'};
+
+  } catch (e) {
+    Logger.log('ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Get comments for a post (for client portal)
+ * @param {string} token - Client access token
+ * @param {string} postId - Post ID
+ * @returns {Object} - {success: true, comments: [...]} or error
+ */
+function getPostCommentsForClient(token, postId) {
+  try {
+    // Validate token
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Get all posts accessible to this client
+    const clientPosts = getClientPosts(authorizedClient.Client_ID);
+    const post = clientPosts.find(function(p) { return p.ID === postId; });
+
+    if (!post) {
+      return {success: false, error: 'Post not found or you do not have access'};
+    }
+
+    // Get comments for this post from Comments sheet
+    const comments = _readSheetAsObjects_('Comments', {
+      filterFn: function(c) {
+        return c.Post_ID === postId;
+      },
+      sortFn: function(a, b) {
+        var dateA = a.Created_Date ? new Date(a.Created_Date) : new Date(0);
+        var dateB = b.Created_Date ? new Date(b.Created_Date) : new Date(0);
+        return dateA - dateB; // Oldest first
+      },
+      coerceFn: function(c) {
+        // Convert dates to ISO strings for JSON serialization
+        if (c.Created_Date instanceof Date) {
+          c.Created_Date = c.Created_Date.toISOString();
+        }
+        return c;
+      }
+    });
+
+    return {success: true, comments: comments};
+
+  } catch (e) {
+    Logger.log('ERROR getting post comments: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Add a comment to the Comments sheet
+ * @param {string} postId - Post ID
+ * @param {string} commenterEmail - Email of person commenting
+ * @param {string} commenterType - 'Client' or 'Internal'
+ * @param {string} commentText - The comment
+ * @param {Object} post - Post object (for denormalized fields)
+ * @param {string} commentCategory - Optional comment category/type
+ * @returns {Object} - {success: true, commentId: '...'} or error
+ */
+function addComment(postId, commenterEmail, commenterType, commentText, post, commentCategory) {
+  try {
+    Logger.log('Adding comment to Comments sheet');
+    Logger.log('Post ID: ' + postId);
+    Logger.log('Commenter: ' + commenterEmail + ' (' + commenterType + ')');
+    Logger.log('Comment Category: ' + commentCategory);
+
+    var sheet = _getSheet_('Comments');
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    // Generate comment ID
+    var commentId = generateId('COM');
+
+    // Prepare row data
+    var rowData = [];
+    headers.forEach(function(header) {
+      switch(header) {
+        case 'ID':
+          rowData.push(commentId);
+          break;
+        case 'Post_ID':
+          rowData.push(postId);
+          break;
+        case 'Commenter_Email':
+          rowData.push(commenterEmail);
+          break;
+        case 'Commenter_Type':
+          rowData.push(commenterType);
+          break;
+        case 'Comment_Text':
+          rowData.push(commentText);
+          break;
+        case 'Created_Date':
+          rowData.push(new Date());
+          break;
+        case 'Post_Title':
+          rowData.push(post ? post.Post_Title : '');
+          break;
+        case 'Post_Status':
+          rowData.push(post ? post.Status : '');
+          break;
+        case 'Comment_Type':
+          rowData.push(commentCategory || '');
+          break;
+        case 'Status':
+          rowData.push('Open'); // Use 'Open' to match dropdown validation
+          break;
+        default:
+          rowData.push('');
+      }
+    });
+
+    // Append to sheet
+    sheet.appendRow(rowData);
+
+    Logger.log('✅ Comment added: ' + commentId);
+
+    return {success: true, commentId: commentId};
+
+  } catch (e) {
+    Logger.log('ERROR adding comment: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION - Create approval records for Client_Review posts
+ * Run this to fix posts that have Client_Review status but no approval records
+ * This allows Approve/Request Changes buttons to work
+ */
+function FIX_CLIENT_REVIEW_POSTS() {
+  Logger.log('=== FIXING CLIENT_REVIEW POSTS ===');
+
+  try {
+    // Get all posts with Client_Review status
+    var posts = _readSheetAsObjects_('Posts', {
+      filterFn: function(p) {
+        return p.Status === 'Client_Review' || p.Status === 'Client Review';
+      }
+    });
+
+    Logger.log('Found ' + posts.length + ' posts with Client_Review status');
+
+    if (posts.length === 0) {
+      Logger.log('No posts to fix');
+      return {success: true, message: 'No posts need fixing'};
+    }
+
+    var fixed = 0;
+    var skipped = 0;
+
+    posts.forEach(function(post) {
+      Logger.log('Checking post: ' + post.ID + ' - ' + post.Post_Title);
+
+      // Check if INTERNAL approval exists (required for workflow)
+      var existingInternal = _readSheetAsObjects_('Post_Approvals', {
+        filterFn: function(a) {
+          return a.Post_ID === post.ID && (a.Approval_Stage === 'Internal_Review' || a.Approval_Stage === 'Internal');
+        }
+      });
+
+      // Check if CLIENT approval record already exists (check both stage name variants)
+      var existingClient = _readSheetAsObjects_('Post_Approvals', {
+        filterFn: function(a) {
+          return a.Post_ID === post.ID && (a.Approval_Stage === 'Client_Review' || a.Approval_Stage === 'Client');
+        }
+      });
+
+      if (existingInternal.length > 0 && existingClient.length > 0) {
+        Logger.log('  ⏭️  Already has both internal and client approval records, skipping');
+        skipped++;
+        return;
+      }
+
+      // Create missing approval records
+      var sheet = _getSheet_('Post_Approvals');
+      var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      var currentUser = Session.getActiveUser().getEmail();
+
+      // Create INTERNAL approval if missing (pre-approved since post is already in Client_Review)
+      if (existingInternal.length === 0) {
+        Logger.log('  ➕ Creating internal approval record (pre-approved)');
+        var internalId = generateId('PA');
+        var internalRow = [];
+        headers.forEach(function(header) {
+          switch(header) {
+            case 'ID': internalRow.push(internalId); break;
+            case 'Post_ID': internalRow.push(post.ID); break;
+            case 'Approval_Stage': internalRow.push('Internal'); break;
+            case 'Approver_Email': internalRow.push(currentUser); break;
+            case 'Approval_Status': internalRow.push('Approved'); break;
+            case 'Requested_Date': internalRow.push(new Date()); break;
+            case 'Decision_Date': internalRow.push(new Date()); break;
+            case 'Decision_Notes': internalRow.push('Auto-approved (post already in Client Review)'); break;
+            case 'Created_By': internalRow.push(currentUser); break;
+            default: internalRow.push('');
+          }
+        });
+        sheet.appendRow(internalRow);
+        Logger.log('    ✅ Created internal approval: ' + internalId);
+        fixed++;
+      }
+
+      // Create CLIENT approval if missing
+      if (existingClient.length === 0) {
+        Logger.log('  ➕ Creating client approval record');
+
+        // Get client approver emails
+        var clientApprovers = '';
+        if (post.Client_Approvers) {
+          clientApprovers = post.Client_Approvers;
+        } else {
+          var client = getClientById(post.Client_ID);
+          if (client && client.Client_Approver_Emails) {
+            clientApprovers = client.Client_Approver_Emails;
+          }
+        }
+
+        var clientId = generateId('PA');
+        var clientRow = [];
+        headers.forEach(function(header) {
+          switch(header) {
+            case 'ID': clientRow.push(clientId); break;
+            case 'Post_ID': clientRow.push(post.ID); break;
+            case 'Approval_Stage': clientRow.push('Client'); break;
+            case 'Approver_Email': clientRow.push(clientApprovers); break;
+            case 'Approval_Status': clientRow.push('Pending'); break;
+            case 'Requested_Date': clientRow.push(new Date()); break;
+            case 'Created_By': clientRow.push(currentUser); break;
+            default: clientRow.push('');
+          }
+        });
+        sheet.appendRow(clientRow);
+        Logger.log('    ✅ Created client approval: ' + clientId);
+        fixed++;
+      }
+    });
+
+    Logger.log('');
+    Logger.log('=== SUMMARY ===');
+    Logger.log('Fixed: ' + fixed);
+    Logger.log('Skipped (already had records): ' + skipped);
+    Logger.log('Total: ' + posts.length);
+
+    return {
+      success: true,
+      fixed: fixed,
+      skipped: skipped,
+      total: posts.length
+    };
+
+  } catch (e) {
+    Logger.log('ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
 }
 
 /**
@@ -787,6 +1323,102 @@ function TEST_JSONP_ENDPOINT() {
     preview: content.substring(0, 200),
     isValidJSONP: content.indexOf('testCallback(') === 0
   };
+}
+
+/**
+ * FIX FUNCTION - Add missing internal approval for POST-012
+ * This fixes posts that were moved to Client_Review without internal approval
+ * Run this once to create the missing internal approval record
+ */
+function FIX_POST_012_INTERNAL_APPROVAL() {
+  Logger.log('=== FIXING POST-012 INTERNAL APPROVAL ===');
+
+  try {
+    var postId = 'POST-012';
+
+    // Check if internal approval already exists
+    var existingInternal = _readSheetAsObjects_('Post_Approvals', {
+      filterFn: function(a) {
+        return a.Post_ID === postId && (a.Approval_Stage === 'Internal_Review' || a.Approval_Stage === 'Internal');
+      }
+    });
+
+    if (existingInternal && existingInternal.length > 0) {
+      Logger.log('⚠️  Internal approval already exists for POST-012, skipping');
+      return {success: false, error: 'Internal approval already exists'};
+    }
+
+    // Get the post to find who created it
+    var posts = _readSheetAsObjects_('Posts', {
+      filterFn: function(p) { return p.ID === postId; }
+    });
+
+    if (posts.length === 0) {
+      Logger.log('❌ Post not found: ' + postId);
+      return {success: false, error: 'Post not found'};
+    }
+
+    var post = posts[0];
+    Logger.log('Post found: ' + post.Post_Title);
+
+    // Create internal approval record (pre-approved)
+    var sheet = _getSheet_('Post_Approvals');
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var approvalId = generateId('PA');
+
+    var currentUser = Session.getActiveUser().getEmail();
+
+    var rowData = [];
+    headers.forEach(function(header) {
+      switch(header) {
+        case 'ID':
+          rowData.push(approvalId);
+          break;
+        case 'Post_ID':
+          rowData.push(postId);
+          break;
+        case 'Approval_Stage':
+          rowData.push('Internal_Review');
+          break;
+        case 'Approver_Email':
+          rowData.push(currentUser);
+          break;
+        case 'Approval_Status':
+          rowData.push('Approved');
+          break;
+        case 'Requested_Date':
+          rowData.push(new Date());
+          break;
+        case 'Decision_Date':
+          rowData.push(new Date());
+          break;
+        case 'Notes':
+          rowData.push('Auto-approved to fix missing internal approval');
+          break;
+        case 'Created_By':
+          rowData.push(currentUser);
+          break;
+        default:
+          rowData.push('');
+      }
+    });
+
+    sheet.appendRow(rowData);
+    Logger.log('✅ Created internal approval record: ' + approvalId);
+
+    // Now trigger status update check
+    Logger.log('Checking if post status should update...');
+    checkAndUpdatePostApprovalStatus(postId);
+
+    Logger.log('✅ Fix complete! Check Posts sheet for updated status.');
+
+    return {success: true, approvalId: approvalId};
+
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
 }
 
 /**

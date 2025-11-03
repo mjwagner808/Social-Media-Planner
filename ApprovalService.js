@@ -155,34 +155,41 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
 /**
  * Record approval decision
  */
-function recordApprovalDecision(approvalId, decision, notes) {
+function recordApprovalDecision(approvalId, decision, notes, approverEmail) {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
-  
+
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === approvalId) {
       var statusCol = getColumnIndexByName(headers, 'Approval_Status');
       var dateCol = getColumnIndexByName(headers, 'Decision_Date');
       var notesCol = getColumnIndexByName(headers, 'Decision_Notes');
-      
+      var emailCol = getColumnIndexByName(headers, 'Approver_Email');
+
       sheet.getRange(i + 1, statusCol + 1).setValue(decision);
       sheet.getRange(i + 1, dateCol + 1).setValue(new Date());
       sheet.getRange(i + 1, notesCol + 1).setValue(notes || '');
-      
+
+      // Update approver email if provided (records actual approving client)
+      if (approverEmail && emailCol !== -1) {
+        sheet.getRange(i + 1, emailCol + 1).setValue(approverEmail);
+      }
+
       // Get post ID to check if all approvals are complete
       var postId = data[i][1];
       checkAndUpdatePostApprovalStatus(postId);
-      
+
       logAction('Approval decision recorded', {
         approvalId: approvalId,
-        decision: decision
+        decision: decision,
+        approverEmail: approverEmail
       });
-      
+
       return {success: true, message: 'Decision recorded'};
     }
   }
-  
+
   return {success: false, error: 'Approval record not found'};
 }
 
@@ -190,46 +197,64 @@ function recordApprovalDecision(approvalId, decision, notes) {
  * Check if all approvals for a post are complete and update post status
  */
 function checkAndUpdatePostApprovalStatus(postId) {
+  Logger.log('=== Checking approval status for post: ' + postId + ' ===');
+
   var internalApprovals = getPostApprovals(postId, 'Internal');
   var clientApprovals = getPostApprovals(postId, 'Client');
-  
+
+  Logger.log('Internal approvals found: ' + internalApprovals.length);
+  Logger.log('Client approvals found: ' + clientApprovals.length);
+
   // Check internal approvals
   var allInternalApproved = internalApprovals.length > 0 && internalApprovals.every(function(approval) {
     return approval.Approval_Status === 'Approved';
   });
-  
+
   var anyInternalRejected = internalApprovals.some(function(approval) {
     return approval.Approval_Status === 'Rejected';
   });
-  
+
   var anyInternalChangesRequested = internalApprovals.some(function(approval) {
     return approval.Approval_Status === 'Changes_Requested';
   });
-  
+
   // Check client approvals
   var allClientApproved = clientApprovals.length > 0 && clientApprovals.every(function(approval) {
     return approval.Approval_Status === 'Approved';
   });
-  
+
   var anyClientRejected = clientApprovals.some(function(approval) {
     return approval.Approval_Status === 'Rejected';
   });
-  
+
   var anyClientChangesRequested = clientApprovals.some(function(approval) {
     return approval.Approval_Status === 'Changes_Requested';
   });
-  
+
+  Logger.log('All internal approved: ' + allInternalApproved);
+  Logger.log('Any internal rejected: ' + anyInternalRejected);
+  Logger.log('Any internal changes requested: ' + anyInternalChangesRequested);
+  Logger.log('All client approved: ' + allClientApproved);
+  Logger.log('Any client rejected: ' + anyClientRejected);
+  Logger.log('Any client changes requested: ' + anyClientChangesRequested);
+
   // Update post status based on approval state
   if (anyInternalRejected || anyClientRejected) {
+    Logger.log('→ Updating status to: Cancelled (rejection found)');
     updatePostStatus(postId, 'Cancelled');
   } else if (anyInternalChangesRequested || anyClientChangesRequested) {
+    Logger.log('→ Updating status to: Draft (changes requested)');
     updatePostStatus(postId, 'Draft'); // Send back to draft for revisions
   } else if (allInternalApproved && clientApprovals.length === 0) {
     // Internal approved but no client approvals submitted yet
     // Status remains 'Internal_Review'
+    Logger.log('→ Status remains Internal_Review (no client approvals yet)');
   } else if (allInternalApproved && allClientApproved) {
     // All approvals complete
+    Logger.log('→ Updating status to: Approved (all approvals complete)');
     updatePostStatus(postId, 'Approved');
+  } else {
+    Logger.log('→ No status update (approvals still pending)');
   }
 }
 
@@ -239,12 +264,12 @@ function checkAndUpdatePostApprovalStatus(postId) {
 function getPostApprovals(postId, stage) {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   var data = sheet.getDataRange().getValues();
-  
+
   if (data.length <= 1) return [];
-  
+
   var headers = data[0];
   var rows = data.slice(1);
-  
+
   var approvals = rows.map(function(row) {
     var obj = {};
     headers.forEach(function(header, index) {
@@ -254,13 +279,19 @@ function getPostApprovals(postId, stage) {
   }).filter(function(approval) {
     return approval.Post_ID === postId;
   });
-  
+
   if (stage) {
     approvals = approvals.filter(function(approval) {
+      // Check for both stage name variants for compatibility
+      if (stage === 'Internal') {
+        return approval.Approval_Stage === 'Internal' || approval.Approval_Stage === 'Internal_Review';
+      } else if (stage === 'Client') {
+        return approval.Approval_Stage === 'Client' || approval.Approval_Stage === 'Client_Review';
+      }
       return approval.Approval_Stage === stage;
     });
   }
-  
+
   return approvals;
 }
 
