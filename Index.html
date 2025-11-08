@@ -891,6 +891,9 @@
             </div>
           </div>
         </div>
+        <button class="btn btn-secondary" onclick="generateTestNotification()" title="Create a test notification to preview the notification system">
+          🧪 Test Notification
+        </button>
         <button class="btn btn-secondary" onclick="showApprovalDashboard()">
           📥 My Approvals<span class="badge" id="approval-count" style="display: none;">0</span>
         </button>
@@ -3055,6 +3058,31 @@
             '<div style="padding: 20px; text-align: center; color: #ea4335;">Error loading notifications</div>';
         })
         .getUnreadNotifications('<?= userEmail ?>');
+    }
+
+    /**
+     * Generate a test notification
+     * Simulates receiving a notification from another user
+     */
+    function generateTestNotification() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            alert('✅ Test notification created!\n\n' +
+                  'From: ' + result.details.from + '\n' +
+                  'Type: ' + result.details.type + '\n' +
+                  'Post: ' + result.details.post + '\n\n' +
+                  'Check your notification bell (🔔) to see it!');
+            // Reload notifications to show the new test notification
+            loadNotifications();
+          } else {
+            alert('❌ Error: ' + (result.error || 'Failed to create test notification'));
+          }
+        })
+        .withFailureHandler(function(error) {
+          alert('❌ Error: ' + error.message);
+        })
+        .createTestNotification();
     }
 
     /**

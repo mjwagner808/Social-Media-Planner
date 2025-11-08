@@ -358,15 +358,16 @@ function notifyStatusChange(userEmail, postTitle, newStatus, postId) {
 }
 
 /**
- * Create notification for internal note added to a post
+ * Create notification for comment added to a post
  * @param {string} userEmail - User to notify
  * @param {string} postId - Post ID
- * @param {string} commenterEmail - Who added the note
- * @param {string} commentText - The note content (truncated for notification)
+ * @param {string} commenterEmail - Who added the comment
+ * @param {string} commentText - The comment content (truncated for notification)
+ * @param {string} commentType - Type of comment (Internal_Note, Revision_Request, etc.)
  */
-function createNotificationForComment(userEmail, postId, commenterEmail, commentText) {
+function createNotificationForComment(userEmail, postId, commenterEmail, commentText, commentType) {
   try {
-    Logger.log('Creating comment notification for ' + userEmail);
+    Logger.log('Creating comment notification for ' + userEmail + ', type: ' + commentType);
 
     // Get post title for better context
     var post = getPostById(postId);
@@ -380,7 +381,27 @@ function createNotificationForComment(userEmail, postId, commenterEmail, comment
       ? commentText.substring(0, 50) + '...'
       : commentText;
 
-    var message = commenterEmail + ' added a note to ' + postTitle + ': ' + preview;
+    // Create type-specific message
+    var message;
+    var actionVerb;
+
+    switch(commentType) {
+      case 'Revision_Request':
+        actionVerb = '🔄 requested changes on';
+        break;
+      case 'Approval_Feedback':
+        actionVerb = '✅ provided feedback on';
+        break;
+      case 'Question':
+        actionVerb = '❓ asked about';
+        break;
+      case 'Internal_Note':
+      default:
+        actionVerb = '💬 added a note to';
+        break;
+    }
+
+    message = commenterEmail + ' ' + actionVerb + ' ' + postTitle + ': ' + preview;
 
     return createNotification(
       userEmail,
@@ -391,6 +412,92 @@ function createNotificationForComment(userEmail, postId, commenterEmail, comment
     );
   } catch (e) {
     Logger.log('Error creating comment notification: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Create a test notification for testing purposes
+ * Simulates receiving a notification from another user
+ * @returns {Object} Success result with notification details
+ */
+function createTestNotification() {
+  try {
+    var currentUser = Session.getActiveUser().getEmail();
+
+    // Get a random post from the current user's posts
+    var posts = _readSheetAsObjects_('Posts', {
+      filterFn: function(p) {
+        return p.Created_By === currentUser;
+      }
+    });
+
+    if (!posts || posts.length === 0) {
+      return {success: false, error: 'No posts found. Create a post first to test notifications.'};
+    }
+
+    // Pick a random post
+    var randomPost = posts[Math.floor(Math.random() * posts.length)];
+    var postId = randomPost.ID;
+    var postTitle = randomPost.Post_Title || 'Untitled';
+
+    // Random comment types and fake users
+    var commentTypes = [
+      {type: 'Internal_Note', emoji: '💬', verb: 'added a note to'},
+      {type: 'Revision_Request', emoji: '🔄', verb: 'requested changes on'},
+      {type: 'Approval_Feedback', emoji: '✅', verb: 'provided feedback on'},
+      {type: 'Question', emoji: '❓', verb: 'asked about'}
+    ];
+
+    var fakeUsers = [
+      'alice.smith@finn.com',
+      'bob.johnson@finn.com',
+      'carol.williams@finn.com',
+      'david.brown@finn.com'
+    ];
+
+    var randomType = commentTypes[Math.floor(Math.random() * commentTypes.length)];
+    var randomUser = fakeUsers[Math.floor(Math.random() * fakeUsers.length)];
+
+    var sampleComments = [
+      'This looks great! Just a few minor tweaks needed.',
+      'Can we adjust the timing on this? I think we should delay by a week.',
+      'Love the direction here. Let\'s discuss the hashtag strategy.',
+      'Quick question - what\'s the target audience for this post?',
+      'Approved! Ready to go live.',
+      'Please revise the copy to be more concise.'
+    ];
+
+    var randomComment = sampleComments[Math.floor(Math.random() * sampleComments.length)];
+
+    var message = randomUser + ' ' + randomType.emoji + ' ' + randomType.verb + ' "' + postTitle + '": ' + randomComment;
+
+    // Create the test notification
+    var result = createNotification(
+      currentUser,
+      message,
+      NOTIFICATION_TYPES.COMMENT_ADDED,
+      postId,
+      '?post=' + postId
+    );
+
+    if (result.success) {
+      return {
+        success: true,
+        message: 'Test notification created!',
+        details: {
+          from: randomUser,
+          type: randomType.type,
+          post: postTitle,
+          notificationId: result.notificationId
+        }
+      };
+    } else {
+      return result;
+    }
+
+  } catch (e) {
+    Logger.log('Error creating test notification: ' + e.message);
     return {success: false, error: e.message};
   }
 }

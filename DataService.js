@@ -793,36 +793,47 @@ function addCommentToPost(postId, commentText, commentType) {
     commentsSheet.appendRow(rowData);
     Logger.log('Row appended to sheet at row: ' + commentsSheet.getLastRow());
 
-    // Create notifications for internal notes
-    if (commentType === 'Internal_Note') {
-      Logger.log('Creating notifications for internal note...');
+    // Create notifications for comments
+    // All comment types create notifications except empty/null
+    if (commentType) {
+      Logger.log('Creating notifications for comment type: ' + commentType);
       try {
         // Get the post to find who created it and who else has commented
         var post = _getPostByIdSimple(postId);
         var notifyEmails = [];
 
-        // Notify post creator (if not the commenter)
-        if (post && post.Created_By && post.Created_By !== currentUser) {
-          notifyEmails.push(post.Created_By);
+        // For Revision_Request and Question: Always notify post creator
+        // For Internal_Note and Approval_Feedback: Notify creator + other commenters
+        if (commentType === 'Revision_Request' || commentType === 'Question') {
+          // Notify post creator (if not the commenter)
+          if (post && post.Created_By && post.Created_By !== currentUser) {
+            notifyEmails.push(post.Created_By);
+          }
+        } else {
+          // Internal_Note and Approval_Feedback: Notify creator + all commenters
+          // Notify post creator (if not the commenter)
+          if (post && post.Created_By && post.Created_By !== currentUser) {
+            notifyEmails.push(post.Created_By);
+          }
+
+          // Notify other commenters (excluding current user)
+          var otherComments = _readSheetAsObjects_('Comments', {
+            filterFn: function(c) {
+              return c.Post_ID === postId && c.Commenter_Email && c.Commenter_Email !== currentUser;
+            }
+          });
+
+          otherComments.forEach(function(comment) {
+            if (comment.Commenter_Email && notifyEmails.indexOf(comment.Commenter_Email) === -1) {
+              notifyEmails.push(comment.Commenter_Email);
+            }
+          });
         }
-
-        // Notify other commenters (excluding current user)
-        var otherComments = _readSheetAsObjects_('Comments', {
-          filterFn: function(c) {
-            return c.Post_ID === postId && c.Commenter_Email && c.Commenter_Email !== currentUser;
-          }
-        });
-
-        otherComments.forEach(function(comment) {
-          if (comment.Commenter_Email && notifyEmails.indexOf(comment.Commenter_Email) === -1) {
-            notifyEmails.push(comment.Commenter_Email);
-          }
-        });
 
         // Create notifications
         Logger.log('Notifying ' + notifyEmails.length + ' users: ' + notifyEmails.join(', '));
         notifyEmails.forEach(function(email) {
-          createNotificationForComment(email, postId, currentUser, commentText);
+          createNotificationForComment(email, postId, currentUser, commentText, commentType);
         });
       } catch (notifError) {
         Logger.log('Warning: Failed to create notifications: ' + notifError.message);
