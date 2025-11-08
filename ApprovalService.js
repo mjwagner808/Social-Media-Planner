@@ -62,13 +62,24 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
       timestamp,                // Email_Sent_Date
       timestamp                 // Created_Date
     ]);
-    
+
     // Send email notification
-    sendApprovalRequestEmail(postId, approverEmail, 'Internal');
+    Logger.log('Sending approval request email to: ' + approverEmail);
+    var emailResult = sendApprovalRequestEmail(postId, approverEmail, 'Internal');
+    if (emailResult && !emailResult.success) {
+      Logger.log('⚠️ WARNING: Failed to send email to ' + approverEmail + ': ' + emailResult.error);
+    }
+
+    // Create in-app notification
+    try {
+      notifyApprovalRequest(approverEmail, post.Post_Title, postId, 'Internal');
+    } catch (notifError) {
+      Logger.log('⚠️ WARNING: Failed to create notification: ' + notifError.message);
+    }
   });
-  
+
   logAction('Post submitted for internal review', {postId: postId});
-  
+
   return {
     success: true,
     message: 'Post submitted for internal review',
@@ -79,21 +90,36 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
 /**
  * Submit post for client review
  * Creates approval records for client approvers
+ * @param {string} postId - Post ID
+ * @param {boolean} skipInternal - Optional flag to skip internal approval validation
  */
-function submitForClientReview(postId) {
+function submitForClientReview(postId, skipInternal) {
   var post = _getPostByIdSimple(postId);
   if (!post) {
     return {success: false, error: 'Post not found'};
   }
-  
-  // Check if internal approvals are complete
-  var internalApprovals = getPostApprovals(postId, 'Internal');
-  var allInternalApproved = internalApprovals.every(function(approval) {
-    return approval.Approval_Status === 'Approved';
-  });
-  
-  if (!allInternalApproved) {
-    return {success: false, error: 'Internal approvals must be completed first'};
+
+  // Check if internal approvals are complete (unless explicitly skipping)
+  if (!skipInternal) {
+    var internalApprovals = getPostApprovals(postId, 'Internal');
+
+    // Allow submitting to client review if:
+    // 1. No internal approval records exist yet (never submitted for internal review), OR
+    // 2. All internal approvals are approved
+    // 3. Post status is Draft (allowing direct submission to client without internal review)
+    var hasInternalApprovals = internalApprovals && internalApprovals.length > 0;
+    var allInternalApproved = !hasInternalApprovals || internalApprovals.every(function(approval) {
+      return approval.Approval_Status === 'Approved';
+    });
+    var isDraft = post.Status === 'Draft';
+
+    // Only enforce internal approval completion if:
+    // - Internal approval records exist (meaning post was submitted for internal review)
+    // - AND not all are approved
+    // - AND post is not in Draft status (if Draft, allow skipping internal entirely)
+    if (hasInternalApprovals && !allInternalApproved && !isDraft) {
+      return {success: false, error: 'Internal approvals must be completed first. To skip internal review, use the "Skip Internal" button from Draft status.'};
+    }
   }
   
   // Get client to find client approvers
@@ -102,9 +128,20 @@ function submitForClientReview(postId) {
     return {success: false, error: 'Client not found'};
   }
   
-  // Update post status
-  updatePostStatus(postId, 'Client_Review');
-  
+  // Update post status (with detailed logging)
+  try {
+    Logger.log('STEP 1: Attempting to update post status to Client_Review');
+    Logger.log('  Post ID: ' + postId);
+    var statusResult = updatePostStatus(postId, 'Client_Review');
+    Logger.log('✅ STEP 1 COMPLETE: Status updated successfully');
+    Logger.log('  Result: ' + JSON.stringify(statusResult));
+  } catch (statusError) {
+    Logger.log('❌ ERROR IN STEP 1 (updatePostStatus):');
+    Logger.log('  Error message: ' + statusError.message);
+    Logger.log('  Stack trace: ' + statusError.stack);
+    return {success: false, error: 'Failed to update status: ' + statusError.message};
+  }
+
   // Parse client approver emails
 // Get client approvers from the post (if specified), otherwise fall back to client settings
 var approvers;
@@ -114,37 +151,85 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
   // Fallback to client-level approvers
   approvers = parseIds(client.Client_Approver_Emails);
 }
-  
+
   if (approvers.length === 0) {
     return {success: false, error: 'No client approvers configured'};
   }
-  
+
+  Logger.log('STEP 2: Creating approval records for ' + approvers.length + ' approvers');
+
   // Create approval records for client approvers
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   var timestamp = new Date();
-  
+
+  var approverIndex = 0;
   approvers.forEach(function(approverEmail) {
-    var newId = generateId('APR');
-    
-    sheet.appendRow([
-      newId,                    // ID
-      postId,                   // Post_ID
-      'Client',                 // Approval_Stage
-      approverEmail,            // Approver_Email
-      approverEmail,            // Approver_Name (we don't have their name)
-      'Pending',                // Approval_Status
-      '',                       // Decision_Date
-      '',                       // Decision_Notes
-      timestamp,                // Email_Sent_Date
-      timestamp                 // Created_Date
-    ]);
-    
+    approverIndex++;
+    Logger.log('STEP 2.' + approverIndex + ': Processing approver: ' + approverEmail);
+
+    try {
+      var newId = generateId('APR');
+      Logger.log('  Generated ID: ' + newId);
+
+      var rowData = [
+        newId,                    // ID
+        postId,                   // Post_ID
+        'Client',                 // Approval_Stage
+        approverEmail,            // Approver_Email
+        approverEmail,            // Approver_Name (we don't have their name)
+        'Pending',                // Approval_Status
+        '',                       // Decision_Date
+        '',                       // Decision_Notes
+        timestamp,                // Email_Sent_Date
+        timestamp                 // Created_Date
+      ];
+
+      Logger.log('  Row data length: ' + rowData.length + ' values');
+      Logger.log('  Attempting sheet.appendRow()...');
+
+      sheet.appendRow(rowData);
+
+      Logger.log('✅ STEP 2.' + approverIndex + ' COMPLETE: Approval record created');
+
+    } catch (appendError) {
+      Logger.log('❌ ERROR IN STEP 2.' + approverIndex + ' (sheet.appendRow):');
+      Logger.log('  Error message: ' + appendError.message);
+      Logger.log('  Stack trace: ' + appendError.stack);
+      Logger.log('  Approver email: ' + approverEmail);
+      Logger.log('  Generated ID: ' + newId);
+      throw appendError; // Re-throw to be caught by outer try-catch
+    }
+
+    // Grant client portal access to this post
+    Logger.log('STEP 2.' + approverIndex + 'b: Granting portal access to: ' + approverEmail);
+    try {
+      addPostToClientAccess(post.Client_ID, approverEmail, postId);
+      Logger.log('✅ Portal access granted');
+    } catch (accessError) {
+      Logger.log('⚠️ WARNING: Failed to grant portal access: ' + accessError.message);
+      // Don't fail the entire operation if portal access fails
+    }
+
     // Send email notification
-    sendApprovalRequestEmail(postId, approverEmail, 'Client');
+    Logger.log('Sending client approval request email to: ' + approverEmail);
+    var emailResult = sendApprovalRequestEmail(postId, approverEmail, 'Client');
+    if (emailResult && !emailResult.success) {
+      Logger.log('⚠️ WARNING: Failed to send email to ' + approverEmail + ': ' + emailResult.error);
+    }
+
+    // Create in-app notification (for internal users, clients get email only)
+    try {
+      // Only notify if approver is an internal user (has @finnpartners.com email)
+      if (approverEmail.indexOf('@finnpartners.com') > -1) {
+        notifyApprovalRequest(approverEmail, post.Post_Title, postId, 'Client');
+      }
+    } catch (notifError) {
+      Logger.log('⚠️ WARNING: Failed to create notification: ' + notifError.message);
+    }
   });
-  
+
   logAction('Post submitted for client review', {postId: postId});
-  
+
   return {
     success: true,
     message: 'Post submitted for client review',
@@ -156,17 +241,26 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
  * Record approval decision
  */
 function recordApprovalDecision(approvalId, decision, notes, approverEmail) {
+  Logger.log('=== RECORD APPROVAL DECISION ===');
+  Logger.log('Approval ID: ' + approvalId);
+  Logger.log('Decision: ' + decision);
+  Logger.log('Notes: ' + notes);
+  Logger.log('Approver Email: ' + approverEmail);
+
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === approvalId) {
+      Logger.log('Found approval record at row ' + (i + 1));
+
       var statusCol = getColumnIndexByName(headers, 'Approval_Status');
       var dateCol = getColumnIndexByName(headers, 'Decision_Date');
       var notesCol = getColumnIndexByName(headers, 'Decision_Notes');
       var emailCol = getColumnIndexByName(headers, 'Approver_Email');
 
+      Logger.log('Updating approval status to: ' + decision);
       sheet.getRange(i + 1, statusCol + 1).setValue(decision);
       sheet.getRange(i + 1, dateCol + 1).setValue(new Date());
       sheet.getRange(i + 1, notesCol + 1).setValue(notes || '');
@@ -176,9 +270,31 @@ function recordApprovalDecision(approvalId, decision, notes, approverEmail) {
         sheet.getRange(i + 1, emailCol + 1).setValue(approverEmail);
       }
 
+      // CRITICAL: Flush spreadsheet changes before reading approval status
+      // This ensures checkAndUpdatePostApprovalStatus reads the updated approval status
+      Logger.log('Flushing spreadsheet changes...');
+      SpreadsheetApp.flush();
+      Logger.log('✅ Spreadsheet flushed');
+
       // Get post ID to check if all approvals are complete
       var postId = data[i][1];
+      Logger.log('Post ID from approval record: ' + postId);
+      Logger.log('Calling checkAndUpdatePostApprovalStatus...');
+
       checkAndUpdatePostApprovalStatus(postId);
+
+      Logger.log('checkAndUpdatePostApprovalStatus completed');
+
+      // Notify post creator about the decision
+      try {
+        var post = _getPostByIdSimple(postId);
+        if (post && post.Created_By) {
+          var approverName = approverEmail || data[i][getColumnIndexByName(headers, 'Approver_Email')];
+          notifyApprovalDecision(post.Created_By, approverName, decision, post.Post_Title, postId);
+        }
+      } catch (notifError) {
+        Logger.log('⚠️ WARNING: Failed to create approval decision notification: ' + notifError.message);
+      }
 
       logAction('Approval decision recorded', {
         approvalId: approvalId,
@@ -203,7 +319,18 @@ function checkAndUpdatePostApprovalStatus(postId) {
   var clientApprovals = getPostApprovals(postId, 'Client');
 
   Logger.log('Internal approvals found: ' + internalApprovals.length);
+  if (internalApprovals.length > 0) {
+    internalApprovals.forEach(function(a) {
+      Logger.log('  Internal: ' + a.ID + ' - Status: ' + a.Approval_Status + ', Stage: ' + a.Approval_Stage);
+    });
+  }
+
   Logger.log('Client approvals found: ' + clientApprovals.length);
+  if (clientApprovals.length > 0) {
+    clientApprovals.forEach(function(a) {
+      Logger.log('  Client: ' + a.ID + ' - Status: ' + a.Approval_Status + ', Stage: ' + a.Approval_Stage);
+    });
+  }
 
   // Check internal approvals
   var allInternalApproved = internalApprovals.length > 0 && internalApprovals.every(function(approval) {
@@ -219,7 +346,9 @@ function checkAndUpdatePostApprovalStatus(postId) {
   });
 
   // Check client approvals
-  var allClientApproved = clientApprovals.length > 0 && clientApprovals.every(function(approval) {
+  // CHANGED: Use .some() instead of .every() - ANY client approval is sufficient
+  // Rationale: Client approval is the final approval. If one client says "approved", post is ready.
+  var anyClientApproved = clientApprovals.length > 0 && clientApprovals.some(function(approval) {
     return approval.Approval_Status === 'Approved';
   });
 
@@ -234,28 +363,37 @@ function checkAndUpdatePostApprovalStatus(postId) {
   Logger.log('All internal approved: ' + allInternalApproved);
   Logger.log('Any internal rejected: ' + anyInternalRejected);
   Logger.log('Any internal changes requested: ' + anyInternalChangesRequested);
-  Logger.log('All client approved: ' + allClientApproved);
+  Logger.log('Any client approved: ' + anyClientApproved);
   Logger.log('Any client rejected: ' + anyClientRejected);
   Logger.log('Any client changes requested: ' + anyClientChangesRequested);
 
   // Update post status based on approval state
+  // Priority order: Rejections > Change Requests > Client Approval > Internal Approval
+
   if (anyInternalRejected || anyClientRejected) {
     Logger.log('→ Updating status to: Cancelled (rejection found)');
     updatePostStatus(postId, 'Cancelled');
-  } else if (anyInternalChangesRequested || anyClientChangesRequested) {
-    Logger.log('→ Updating status to: Draft (changes requested)');
-    updatePostStatus(postId, 'Draft'); // Send back to draft for revisions
-  } else if (allInternalApproved && clientApprovals.length === 0) {
-    // Internal approved but no client approvals submitted yet
-    // Status remains 'Internal_Review'
-    Logger.log('→ Status remains Internal_Review (no client approvals yet)');
-  } else if (allInternalApproved && allClientApproved) {
-    // All approvals complete
-    Logger.log('→ Updating status to: Approved (all approvals complete)');
+  } else if (anyClientChangesRequested) {
+    // Client requested changes - send back to draft
+    Logger.log('→ Updating status to: Draft (client requested changes)');
+    updatePostStatus(postId, 'Draft');
+  } else if (anyInternalChangesRequested) {
+    // Internal requested changes - send back to draft
+    Logger.log('→ Updating status to: Draft (internal requested changes)');
+    updatePostStatus(postId, 'Draft');
+  } else if (anyClientApproved) {
+    // ANY client approved - post is ready to publish (internal approval already happened to get here)
+    Logger.log('→ Updating status to: Approved (at least one client approved)');
     updatePostStatus(postId, 'Approved');
+  } else if (allInternalApproved && clientApprovals.length === 0) {
+    // Internal approved but no client approval yet - should already be in Client_Review
+    Logger.log('→ Status should be Client_Review (internal approved, awaiting client)');
+    // Don't change status here - it should already be Client_Review from submitForClientReview()
   } else {
     Logger.log('→ No status update (approvals still pending)');
   }
+
+  Logger.log('=== checkAndUpdatePostApprovalStatus COMPLETE ===');
 }
 
 /**
@@ -375,8 +513,8 @@ function sendApprovalRequestEmail(postId, approverEmail, stage) {
              webAppUrl + '\n\n' +
              'You can approve, request changes, or reject the post in the application.\n\n' +
              'Thank you!';
-  
-  sendEmail(approverEmail, subject, body);
+
+  return sendEmail(approverEmail, subject, body);
 }
 
 /**

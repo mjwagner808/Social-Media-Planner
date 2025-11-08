@@ -103,36 +103,36 @@ function doGet(e) {
     Logger.log('page: ' + page);
     Logger.log('token: ' + token);
 
-    if (page === 'client' && token) {
-    // Client portal access - SERVER-SIDE RENDERING (no client JS due to CSP for anonymous users)
-    Logger.log('Client portal access requested with token: ' + token);
+    if (page === 'client') {
+    // Client portal access - Inject token into HTML template
+    Logger.log('Client portal access requested');
+    Logger.log('Token parameter: ' + token);
 
-    // Validate token on SERVER
-    const validationResult = validateClientAccess(token);
-    Logger.log('Validation result: ' + JSON.stringify(validationResult));
-
-    // Create template and pass data to it
-    const template = HtmlService.createTemplateFromFile('ClientPortal');
-
-    if (validationResult.success) {
-      // Pass data to template for server-side rendering
-      template.clientInfo = validationResult.clientInfo;
-      template.posts = validationResult.posts;
-      template.validToken = true;
-      template.errorMessage = null;
-    } else {
-      // Pass error to template
-      template.clientInfo = null;
-      template.posts = [];
-      template.validToken = false;
-      template.errorMessage = validationResult.error || 'Invalid access token';
-    }
+    const template = HtmlService.createTemplateFromFile('client-portal');
+    template.accessToken = token || ''; // Inject token as server-side variable
 
     return template.evaluate()
       .setTitle('Content Review Portal')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
   }
+
+    // Check if this is an approval dashboard request
+    if (page === 'approvals') {
+      Logger.log('Approval dashboard requested');
+      const user = Session.getActiveUser().getEmail();
+
+      if (!user) {
+        Logger.log('No authenticated user found for approval dashboard');
+        throw new Error('Access denied. Please sign in to view approvals.');
+      }
+
+      Logger.log('Authenticated user for approvals: ' + user);
+      return HtmlService.createHtmlOutputFromFile('ApprovalDashboard')
+        .setTitle('My Pending Approvals')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
+    }
 
     // Internal user access (existing behavior)
     Logger.log('Not a client portal request, checking for authenticated user...');
@@ -162,7 +162,8 @@ function doGet(e) {
       '<html><body style="font-family: Arial; padding: 40px; text-align: center;">' +
       '<h1 style="color: #dc3545;">Access Error</h1>' +
       '<p>' + error.message + '</p>' +
-      '<p style="color: #666; font-size: 14px;">Please contact support if this problem persists.</p>' +
+      '<p style="color: #666; font-size: 14px; margin-top: 20px;">Please log in to Google with your FINN email address.</p>' +
+      '<p style="color: #999; font-size: 12px;">If this problem persists, please contact support.</p>' +
       '</body></html>'
     );
   }
@@ -589,11 +590,36 @@ function validateClientAccess(token) {
     // Get posts for this client
     var posts = getClientPostsWithImages(authorizedClient.Client_ID);
 
+    // Filter posts based on Post_IDs if specified
+    if (authorizedClient.Post_IDs && authorizedClient.Post_IDs.trim() !== '') {
+      var allowedPostIds = authorizedClient.Post_IDs.split(',').map(function(id) {
+        return id.trim();
+      });
+      Logger.log('Filtering to specific posts: ' + allowedPostIds.join(', '));
+
+      posts = posts.filter(function(post) {
+        return allowedPostIds.indexOf(post.ID) > -1;
+      });
+
+      Logger.log('After filtering: ' + posts.length + ' posts');
+    } else {
+      Logger.log('No Post_IDs restriction - returning all client posts');
+    }
+
     Logger.log('Client access validated. Returning ' + posts.length + ' posts for client: ' + client.Client_Name);
+
+    // Add email to clientInfo for display purposes
+    var clientInfoWithEmail = {};
+    for (var key in client) {
+      if (client.hasOwnProperty(key)) {
+        clientInfoWithEmail[key] = client[key];
+      }
+    }
+    clientInfoWithEmail.Email = authorizedClient.Email;
 
     return {
       success: true,
-      clientInfo: client,
+      clientInfo: clientInfoWithEmail,
       authorizedClient: authorizedClient,
       posts: posts
     };
@@ -630,8 +656,8 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
 
     Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
 
-    // Get all posts accessible to this client (handles subsidiaries)
-    const clientPosts = getClientPosts(authorizedClient.Client_ID);
+    // Get all posts accessible to this client (respects Post_IDs restrictions)
+    const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
     const post = clientPosts.find(function(p) { return p.ID === postId; });
 
     if (!post) {
@@ -643,6 +669,7 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
     // Handle comment-only (no approval record needed for comments on non-Client_Review posts)
     if (decision === 'Comment') {
       Logger.log('Adding comment (no approval decision)');
+      Logger.log('BEFORE COMMENT: Post status = ' + post.Status);
 
       // Add comment to Comments sheet
       const commentResult = addComment(
@@ -660,6 +687,16 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
       }
 
       Logger.log('Comment saved with ID: ' + commentResult.commentId);
+
+      // Verify post status hasn't changed (defensive check)
+      const postAfterComment = getPostById(postId);
+      Logger.log('AFTER COMMENT: Post status = ' + (postAfterComment ? postAfterComment.Status : 'POST_NOT_FOUND'));
+
+      if (postAfterComment && postAfterComment.Status !== post.Status) {
+        Logger.log('⚠️ WARNING: Post status changed unexpectedly from ' + post.Status + ' to ' + postAfterComment.Status);
+        Logger.log('This may indicate a formula or trigger in the spreadsheet is modifying the status.');
+        // Note: Not reverting the change as it may be intentional from a spreadsheet formula
+      }
 
       // ALWAYS send email notification when client comments (regardless of approval record existence)
       Logger.log('========================================');
@@ -770,6 +807,95 @@ function GENERATE_TOKEN_FOR_TESTING() {
 }
 
 /**
+ * MANUAL TEST - Force update post status after approval
+ * Use this to manually trigger the status check for a post
+ * Usage: MANUAL_CHECK_APPROVAL_STATUS('POST-XXX')
+ */
+function MANUAL_CHECK_APPROVAL_STATUS(postId) {
+  if (!postId) {
+    Logger.log('❌ Please provide a Post ID, e.g.: MANUAL_CHECK_APPROVAL_STATUS("POST-032")');
+    return;
+  }
+
+  Logger.log('=== MANUAL STATUS CHECK FOR: ' + postId + ' ===');
+
+  // First, show current state
+  DIAGNOSE_POST_STATUS(postId);
+
+  Logger.log('');
+  Logger.log('=== NOW RUNNING checkAndUpdatePostApprovalStatus ===');
+
+  // Force run the status update
+  checkAndUpdatePostApprovalStatus(postId);
+
+  Logger.log('');
+  Logger.log('=== CHECKING POST STATUS AFTER UPDATE ===');
+
+  // Check the result
+  var post = getPostById(postId);
+  if (post) {
+    Logger.log('✅ Post current status: ' + post.Status);
+  } else {
+    Logger.log('❌ Post not found');
+  }
+}
+
+/**
+ * Quick test for POST-020 specifically
+ */
+function DIAGNOSE_POST_020() {
+  return DIAGNOSE_POST_STATUS('POST-020');
+}
+
+/**
+ * FIX STUCK POSTS - Manually run status check for all posts stuck in Client_Review
+ * This will fix posts that were stuck due to the old "ALL must approve" logic
+ * Usage: Just run this function - it will find and fix all stuck posts
+ */
+function FIX_ALL_STUCK_CLIENT_REVIEW_POSTS() {
+  Logger.log('=== FIXING ALL STUCK CLIENT_REVIEW POSTS ===');
+
+  // Get all posts in Client_Review status
+  var posts = _readSheetAsObjects_('Posts', {
+    filterFn: function(p) { return p.Status === 'Client_Review'; }
+  });
+
+  Logger.log('Found ' + posts.length + ' posts in Client_Review status');
+
+  if (posts.length === 0) {
+    Logger.log('✅ No stuck posts found!');
+    return;
+  }
+
+  Logger.log('');
+  posts.forEach(function(post, index) {
+    Logger.log('--- Post ' + (index + 1) + ' of ' + posts.length + ' ---');
+    Logger.log('ID: ' + post.ID);
+    Logger.log('Title: ' + post.Post_Title);
+
+    // Run the status check with new logic
+    checkAndUpdatePostApprovalStatus(post.ID);
+
+    // Check if it updated
+    var updatedPost = getPostById(post.ID);
+    if (updatedPost) {
+      Logger.log('New status: ' + updatedPost.Status);
+      if (updatedPost.Status === 'Approved') {
+        Logger.log('✅ FIXED! Status updated to Approved');
+      } else if (updatedPost.Status === 'Draft') {
+        Logger.log('🔄 Status updated to Draft (changes requested)');
+      } else {
+        Logger.log('⏳ Still awaiting approvals');
+      }
+    }
+    Logger.log('');
+  });
+
+  Logger.log('=== FIX COMPLETE ===');
+  Logger.log('Refresh your calendar to see the updated statuses');
+}
+
+/**
  * DIAGNOSTIC - Check why post status isn't updating after approval
  * Run this with a Post ID to see approval workflow state
  * Usage: DIAGNOSE_POST_STATUS('POST-012') or just DIAGNOSE_POST_STATUS() to use default
@@ -833,9 +959,25 @@ function DIAGNOSE_POST_STATUS(postId) {
   Logger.log('All internal approved: ' + allInternalApproved);
   Logger.log('All client approved: ' + allClientApproved);
 
+  // Check for changes requested or rejected
+  var anyChangesRequested = allApprovals.some(function(a) {
+    return a.Approval_Status === 'Changes_Requested';
+  });
+
+  var anyRejected = allApprovals.some(function(a) {
+    return a.Approval_Status === 'Rejected';
+  });
+
+  Logger.log('Any changes requested: ' + anyChangesRequested);
+  Logger.log('Any rejected: ' + anyRejected);
+
   Logger.log('');
   Logger.log('EXPECTED OUTCOME:');
-  if (allInternalApproved && allClientApproved) {
+  if (anyRejected) {
+    Logger.log('❌ Should update to: Cancelled (rejection found)');
+  } else if (anyChangesRequested) {
+    Logger.log('🔄 Should update to: Draft (changes requested)');
+  } else if (allInternalApproved && allClientApproved) {
     Logger.log('✅ Should update to: Approved');
   } else if (allInternalApproved && clientApprovals.length === 0) {
     Logger.log('⏳ Should remain: Internal_Review (waiting for client approval)');
@@ -887,7 +1029,7 @@ function TEST_SIMPLE_EMAIL() {
   var quotaRemaining = MailApp.getRemainingDailyQuota();
   Logger.log('Remaining daily email quota: ' + quotaRemaining);
 
-  var recipient = 'mj.wagner@finnpartners.com';
+  var recipient = 'mj.opala@gmail.com';
   var subject = 'Test Email from Social Media Planner App';
   var body = 'This is a test email sent at ' + new Date() + '\n\n' +
              'If you receive this, email functionality is working.\n\n' +
@@ -1016,8 +1158,8 @@ function getPostCommentsForClient(token, postId) {
       return {success: false, error: 'Invalid or expired access token'};
     }
 
-    // Get all posts accessible to this client
-    const clientPosts = getClientPosts(authorizedClient.Client_ID);
+    // Get all posts accessible to this client (respects Post_IDs restrictions)
+    const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
     const post = clientPosts.find(function(p) { return p.ID === postId; });
 
     if (!post) {
@@ -1557,6 +1699,667 @@ function AUDIT_CLIENT_TOKENS() {
   } catch (e) {
     Logger.log('❌ ERROR: ' + e.message);
     Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+// ============================================================================
+// CLIENT PORTAL ACCESS MANAGEMENT (FOR UI)
+// ============================================================================
+
+/**
+ * Check if a client has portal access
+ * Used by Index.html to display token status
+ */
+function checkClientHasAccess(clientId, approverEmails) {
+  try {
+    Logger.log('=== checkClientHasAccess ===');
+    Logger.log('Client ID: ' + clientId);
+    Logger.log('Approver Emails: ' + approverEmails);
+
+    var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Authorized_Clients');
+    var data = sheet.getDataRange().getValues();
+
+    if (data.length <= 1) {
+      Logger.log('No authorized clients found');
+      return {hasAccess: false};
+    }
+
+    var headers = data[0];
+    var clientIdIndex = headers.indexOf('Client_ID');
+    var emailIndex = headers.indexOf('Email');
+    var statusIndex = headers.indexOf('Status');
+    var tokenIndex = headers.indexOf('Access_Token');
+    var lastLoginIndex = headers.indexOf('Last_Login_Date');
+    var accessUrlIndex = headers.indexOf('Access_URL');
+
+    // Get the first email from the approverEmails list
+    var email = '';
+    if (approverEmails && typeof approverEmails === 'string') {
+      email = approverEmails.split(',')[0].trim().toLowerCase();
+    }
+
+    Logger.log('Checking for email: ' + email);
+
+    if (!email) {
+      Logger.log('No email provided');
+      return {hasAccess: false};
+    }
+
+    // Check if THIS SPECIFIC EMAIL has an active token for this client
+    for (var i = 1; i < data.length; i++) {
+      var rowClientId = data[i][clientIdIndex];
+      var rowEmail = String(data[i][emailIndex]).trim().toLowerCase();
+      var rowStatus = data[i][statusIndex];
+
+      Logger.log('Row ' + i + ': Client=' + rowClientId + ', Email=' + rowEmail + ', Status=' + rowStatus);
+
+      if (rowClientId === clientId && rowEmail === email && rowStatus === 'Active') {
+        Logger.log('✅ Found active token for this email');
+        var accessUrl = data[i][accessUrlIndex];
+        // Fallback to constructing URL if not stored (for backwards compatibility)
+        if (!accessUrl && data[i][tokenIndex]) {
+          accessUrl = getClientAccessUrl(data[i][tokenIndex]);
+        }
+        return {
+          hasAccess: true,
+          token: data[i][tokenIndex],
+          accessUrl: accessUrl,
+          lastLogin: data[i][lastLoginIndex] ? new Date(data[i][lastLoginIndex]).toLocaleString() : 'Never'
+        };
+      }
+    }
+
+    Logger.log('❌ No active token found for this email');
+    return {hasAccess: false};
+  } catch (e) {
+    Logger.log('Error in checkClientHasAccess: ' + e.message);
+    return {hasAccess: false, error: e.message};
+  }
+}
+
+/**
+ * Grant client access for a specific post
+ * Wrapper function that extracts email from approverEmails list
+ */
+function grantClientAccessForPost(postId, clientId, approverEmails) {
+  try {
+    Logger.log('=== GRANTING CLIENT ACCESS FOR POST ===');
+    Logger.log('Post ID: ' + postId);
+    Logger.log('Client ID: ' + clientId);
+    Logger.log('Approver Emails: ' + approverEmails);
+
+    // Use the first email from the approverEmails list
+    var email = '';
+    if (approverEmails && typeof approverEmails === 'string') {
+      email = approverEmails.split(',')[0].trim();
+    }
+
+    if (!email) {
+      return {success: false, error: 'No client approver email found. Please add a client approver to this post first.'};
+    }
+
+    Logger.log('Using email: ' + email);
+
+    // Grant access to this specific post only
+    return grantClientAccess(clientId, email, 'Full', postId);
+  } catch (e) {
+    Logger.log('Error in grantClientAccessForPost: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Revoke client access for a specific client
+ */
+function revokeClientAccessForClient(clientId) {
+  try {
+    Logger.log('=== REVOKING CLIENT ACCESS ===');
+    Logger.log('Client ID: ' + clientId);
+
+    var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Authorized_Clients');
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+
+    var clientIdIndex = headers.indexOf('Client_ID');
+    var statusIndex = headers.indexOf('Status');
+
+    var found = false;
+
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][clientIdIndex] === clientId) {
+        sheet.getRange(i + 1, statusIndex + 1).setValue('Revoked');
+        Logger.log('✅ Revoked access for client: ' + clientId);
+        found = true;
+      }
+    }
+
+    if (!found) {
+      Logger.log('⚠️ No active access found for client: ' + clientId);
+      return {success: false, error: 'No access found for this client'};
+    }
+
+    return {success: true, message: 'Client access revoked'};
+  } catch (e) {
+    Logger.log('Error in revokeClientAccessForClient: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+// ============================================================================
+// DIAGNOSTIC FUNCTIONS FOR TROUBLESHOOTING
+// ============================================================================
+
+/**
+ * Test if data loading functions work
+ * Run this if the calendar is stuck loading
+ */
+function TEST_LOAD_DATA() {
+  Logger.log('=== TESTING DATA LOAD ===');
+
+  try {
+    Logger.log('1. Testing getAllPostsWithImages()...');
+    var startTime = new Date().getTime();
+    var posts = getAllPostsWithImages();
+    var endTime = new Date().getTime();
+    Logger.log('Posts loaded: ' + (Array.isArray(posts) ? posts.length : 'ERROR'));
+    Logger.log('Time taken: ' + (endTime - startTime) + 'ms');
+
+    if (posts && posts.success === false) {
+      Logger.log('❌ Error from getAllPostsWithImages: ' + posts.error);
+      return;
+    }
+
+    Logger.log('');
+    Logger.log('2. Testing getAllClients()...');
+    startTime = new Date().getTime();
+    var clients = getAllClients();
+    endTime = new Date().getTime();
+    Logger.log('Clients loaded: ' + (Array.isArray(clients) ? clients.length : 'ERROR'));
+    Logger.log('Time taken: ' + (endTime - startTime) + 'ms');
+
+    if (clients && clients.success === false) {
+      Logger.log('❌ Error from getAllClients: ' + clients.error);
+      return;
+    }
+
+    Logger.log('');
+    Logger.log('✅ Both functions work!');
+    Logger.log('Posts: ' + posts.length);
+    Logger.log('Clients: ' + clients.length);
+
+    return {
+      success: true,
+      posts: posts.length,
+      clients: clients.length
+    };
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message, stack: e.stack};
+  }
+}
+
+/**
+ * Get the current web app URL
+ * Run this to get the correct deployment URL
+ */
+function GET_WEB_APP_URL() {
+  Logger.log('=== WEB APP DEPLOYMENT INFO ===');
+  Logger.log('Script ID: ' + ScriptApp.getScriptId());
+  Logger.log('');
+  Logger.log('To get your web app URL:');
+  Logger.log('1. Click Deploy → Manage deployments');
+  Logger.log('2. Copy the Web app URL from the active deployment');
+  Logger.log('3. Make sure "Execute as" is set to: User accessing the web app');
+  Logger.log('4. Make sure "Who has access" is set to: Anyone');
+  Logger.log('');
+  Logger.log('Current user: ' + Session.getActiveUser().getEmail());
+
+  return {
+    scriptId: ScriptApp.getScriptId(),
+    currentUser: Session.getActiveUser().getEmail()
+  };
+}
+
+/**
+ * TEST_RENDER - Diagnostic function to see EXACTLY what HTML is rendered
+ * This helps debug template processing issues
+ */
+function TEST_RENDER() {
+  try {
+    Logger.log('=== TESTING HTML RENDERING ===');
+
+    var user = Session.getActiveUser().getEmail();
+    Logger.log('User: ' + user);
+
+    const template = HtmlService.createTemplateFromFile('Index');
+    template.userEmail = user;
+    template.userName = getUserFullName(user) || "Test User";
+    template.userRole = getUserDefaultRole(user) || "Admin";
+
+    Logger.log('Template values set:');
+    Logger.log('  userName: ' + template.userName);
+    Logger.log('  userRole: ' + template.userRole);
+    Logger.log('  userName type: ' + typeof template.userName);
+    Logger.log('  userRole type: ' + typeof template.userRole);
+
+    var htmlOutput = template.evaluate().getContent();
+    var lines = htmlOutput.split('\n');
+
+    Logger.log('');
+    Logger.log('Total lines in rendered HTML: ' + lines.length);
+    Logger.log('');
+    Logger.log('=== EXTRACTING FULL JAVASCRIPT SECTION ===');
+
+    // Extract just the JavaScript (between <script> and </script>)
+    var scriptContent = '';
+    var inScript = false;
+    var scriptStartLine = 0;
+    var scriptEndLine = 0;
+
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf('<script>') !== -1) {
+        inScript = true;
+        scriptStartLine = i + 1;
+        continue;
+      }
+      if (lines[i].indexOf('</script>') !== -1) {
+        inScript = false;
+        scriptEndLine = i + 1;
+        break;
+      }
+      if (inScript) {
+        scriptContent += lines[i] + '\n';
+      }
+    }
+
+    Logger.log('Script section: lines ' + scriptStartLine + ' to ' + scriptEndLine);
+    Logger.log('Script content length: ' + scriptContent.length + ' characters');
+    Logger.log('');
+    Logger.log('=== LOGGING ALL SCRIPT CONTENT ===');
+    Logger.log('');
+
+    var scriptLines = scriptContent.split('\n');
+
+    // Log in chunks to avoid hitting log size limits
+    Logger.log('Total script lines: ' + scriptLines.length);
+    Logger.log('');
+
+    // Log ALL lines
+    for (var i = 0; i < scriptLines.length; i++) {
+      Logger.log((i + 1) + ': ' + scriptLines[i]);
+    }
+
+    Logger.log('');
+    Logger.log('=== TEST COMPLETE ===');
+
+    return {
+      success: true,
+      totalLines: lines.length,
+      scriptLines: scriptLines.length,
+      userName: template.userName,
+      userRole: template.userRole,
+      scriptContent: scriptContent  // Return full content for manual inspection
+    };
+
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message, stack: e.stack};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Check what validation rules exist on Post_Approvals
+ */
+function CHECK_POST_APPROVALS_VALIDATION() {
+  try {
+    Logger.log('=== CHECKING POST_APPROVALS VALIDATION ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Approvals');
+
+    if (!sheet) {
+      Logger.log('❌ Post_Approvals sheet not found');
+      return;
+    }
+
+    var dataRange = sheet.getDataRange();
+    var validations = dataRange.getDataValidations();
+
+    Logger.log('Checking range: ' + dataRange.getA1Notation());
+    Logger.log('Rows: ' + validations.length);
+
+    var foundValidation = false;
+
+    for (var i = 0; i < validations.length; i++) {
+      for (var j = 0; j < validations[i].length; j++) {
+        if (validations[i][j] != null) {
+          foundValidation = true;
+          var cellAddress = sheet.getRange(i + 1, j + 1).getA1Notation();
+          var rule = validations[i][j];
+          var criteria = rule.getCriteriaType();
+          var values = rule.getCriteriaValues();
+
+          Logger.log('---');
+          Logger.log('Cell: ' + cellAddress);
+          Logger.log('Criteria Type: ' + criteria);
+          try {
+            Logger.log('Criteria Values: ' + JSON.stringify(values));
+          } catch (e) {
+            Logger.log('Criteria Values: [Cannot stringify]');
+          }
+          Logger.log('Allow Invalid: ' + rule.getAllowInvalid());
+        }
+      }
+    }
+
+    if (!foundValidation) {
+      Logger.log('✅ No validation rules found');
+    }
+
+    return {success: true, foundValidation: foundValidation};
+
+  } catch (e) {
+    Logger.log('❌ Error: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Remove all data validation from Post_Approvals sheet
+ * Run this once to clear any validation rules
+ */
+function REMOVE_POST_APPROVALS_VALIDATION() {
+  try {
+    Logger.log('=== REMOVING POST_APPROVALS VALIDATION ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Approvals');
+
+    if (!sheet) {
+      Logger.log('❌ Post_Approvals sheet not found');
+      return {success: false, error: 'Sheet not found'};
+    }
+
+    // Get the data range
+    var dataRange = sheet.getDataRange();
+
+    // Clear all validation rules
+    dataRange.clearDataValidations();
+
+    Logger.log('✅ All validation rules removed from Post_Approvals sheet');
+    Logger.log('Range cleared: ' + dataRange.getA1Notation());
+
+    return {success: true, message: 'Validation cleared'};
+
+  } catch (e) {
+    Logger.log('❌ Error: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Diagnose Post_Approvals sheet structure
+ */
+function DIAGNOSE_POST_APPROVALS_STRUCTURE() {
+  try {
+    Logger.log('=== DIAGNOSING POST_APPROVALS STRUCTURE ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Approvals');
+
+    if (!sheet) {
+      Logger.log('❌ Post_Approvals sheet not found');
+      return {success: false, error: 'Sheet not found'};
+    }
+
+    // Get headers
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    Logger.log('Total columns: ' + headers.length);
+    Logger.log('Headers:');
+    for (var i = 0; i < headers.length; i++) {
+      var colLetter = String.fromCharCode(65 + i); // A=65
+      Logger.log('  Column ' + colLetter + ' (' + (i+1) + '): ' + headers[i]);
+    }
+
+    // Check what code EXPECTS to write
+    Logger.log('');
+    Logger.log('Code expects to write these columns (from ApprovalService.js):');
+    Logger.log('  1. ID');
+    Logger.log('  2. Post_ID');
+    Logger.log('  3. Approval_Stage');
+    Logger.log('  4. Approver_Email');
+    Logger.log('  5. Approver_Name');
+    Logger.log('  6. Approval_Status');
+    Logger.log('  7. Decision_Date');
+    Logger.log('  8. Decision_Notes');
+    Logger.log('  9. Email_Sent_Date');
+    Logger.log('  10. Created_Date');
+
+    // Check for validation on ALL rows (not just first 50)
+    Logger.log('');
+    Logger.log('Checking for validation rules on entire sheet (' + sheet.getMaxRows() + ' rows)...');
+    var dataRange = sheet.getRange(1, 1, sheet.getMaxRows(), headers.length);
+    var validations = dataRange.getDataValidations();
+
+    var foundValidation = false;
+    for (var row = 0; row < validations.length; row++) {
+      for (var col = 0; col < validations[row].length; col++) {
+        if (validations[row][col] != null) {
+          foundValidation = true;
+          var colLetter = String.fromCharCode(65 + col);
+          var cellRef = colLetter + (row + 1);
+          Logger.log('  ⚠️ VALIDATION FOUND at: ' + cellRef);
+          Logger.log('     Column name: ' + headers[col]);
+
+          var rule = validations[row][col];
+          try {
+            var criteria = rule.getCriteriaType();
+            var criteriaValues = rule.getCriteriaValues();
+            Logger.log('     Criteria type: ' + criteria);
+            Logger.log('     Allowed values: ' + JSON.stringify(criteriaValues));
+            Logger.log('     Allow invalid: ' + rule.getAllowInvalid());
+          } catch (e) {
+            Logger.log('     Cannot read validation details: ' + e.message);
+          }
+        }
+      }
+    }
+
+    if (!foundValidation) {
+      Logger.log('  ✅ No validation rules found on any rows');
+    } else {
+      Logger.log('');
+      Logger.log('🚨 VALIDATION RULES EXIST - This is the source of the error!');
+    }
+
+    return {
+      success: true,
+      columnCount: headers.length,
+      headers: headers
+    };
+
+  } catch (e) {
+    Logger.log('❌ Error: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Test writing to Post_Approvals sheet
+ */
+function TEST_WRITE_TO_POST_APPROVALS() {
+  try {
+    Logger.log('=== TESTING WRITE TO POST_APPROVALS ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Approvals');
+
+    var testData = [
+      'TEST-001',           // ID
+      'POST-021',           // Post_ID
+      'Client',             // Approval_Stage
+      'test@example.com',   // Approver_Email
+      'Test User',          // Approver_Name
+      'Pending',            // Approval_Status
+      '',                   // Decision_Date (empty)
+      '',                   // Decision_Notes (empty)
+      new Date(),           // Email_Sent_Date
+      new Date()            // Created_Date
+    ];
+
+    Logger.log('Attempting to append row with ' + testData.length + ' values');
+    Logger.log('Values: ID=' + testData[0] + ', Post_ID=' + testData[1] + ', Stage=' + testData[2]);
+
+    sheet.appendRow(testData);
+
+    Logger.log('✅ SUCCESS - Row appended to row ' + sheet.getLastRow());
+
+    // Clean up - delete the test row
+    var lastRow = sheet.getLastRow();
+    sheet.deleteRow(lastRow);
+    Logger.log('✅ Test row deleted');
+
+    return {success: true, message: 'Write test passed'};
+
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message, stack: e.stack};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Check Post_Platforms sheet for validation on Status column
+ */
+function CHECK_POST_PLATFORMS_VALIDATION() {
+  try {
+    Logger.log('=== CHECKING POST_PLATFORMS VALIDATION ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Platforms');
+
+    if (!sheet) {
+      Logger.log('❌ Post_Platforms sheet not found');
+      return {success: false, error: 'Sheet not found'};
+    }
+
+    // Get headers
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    Logger.log('Total columns: ' + headers.length);
+    Logger.log('');
+    Logger.log('Column Headers:');
+    for (var i = 0; i < headers.length; i++) {
+      var colLetter = String.fromCharCode(65 + i);
+      Logger.log('  Column ' + colLetter + ' (' + (i+1) + '): ' + headers[i]);
+    }
+
+    // Find Status column
+    var statusColIndex = headers.indexOf('Status');
+    if (statusColIndex === -1) {
+      Logger.log('');
+      Logger.log('⚠️ No Status column found in Post_Platforms');
+      return {success: false, error: 'Status column not found'};
+    }
+
+    var statusColLetter = String.fromCharCode(65 + statusColIndex);
+    Logger.log('');
+    Logger.log('Status column found at: Column ' + statusColLetter + ' (index ' + (statusColIndex + 1) + ')');
+
+    // Check validation on entire Status column
+    Logger.log('');
+    Logger.log('Checking validation on Status column (' + statusColLetter + ')...');
+
+    var statusRange = sheet.getRange(2, statusColIndex + 1, Math.min(100, sheet.getMaxRows() - 1), 1);
+    var validations = statusRange.getDataValidations();
+
+    var foundValidation = false;
+    for (var i = 0; i < validations.length; i++) {
+      if (validations[i][0] != null) {
+        foundValidation = true;
+        var rowNum = i + 2; // +2 because we start at row 2 and array is 0-indexed
+        Logger.log('  ⚠️ VALIDATION FOUND at: ' + statusColLetter + rowNum);
+
+        var rule = validations[i][0];
+        try {
+          var criteria = rule.getCriteriaType();
+          var criteriaValues = rule.getCriteriaValues();
+          Logger.log('     Criteria type: ' + criteria);
+          Logger.log('     Allowed values: ' + JSON.stringify(criteriaValues));
+          Logger.log('     Allow invalid: ' + rule.getAllowInvalid());
+          Logger.log('');
+
+          // Only log first instance to avoid spam
+          break;
+        } catch (e) {
+          Logger.log('     Cannot read validation details: ' + e.message);
+        }
+      }
+    }
+
+    if (!foundValidation) {
+      Logger.log('  ✅ No validation rules found on Status column');
+    } else {
+      Logger.log('');
+      Logger.log('🚨 THIS IS THE SOURCE OF THE ERROR!');
+      Logger.log('Code tries to write "Active" but validation requires different values');
+    }
+
+    return {success: true, statusColumn: statusColLetter, hasValidation: foundValidation};
+
+  } catch (e) {
+    Logger.log('❌ Error: ' + e.message);
+    Logger.log(e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * ADMIN FUNCTION: Check Posts sheet Status column validation
+ */
+function CHECK_POSTS_STATUS_VALIDATION() {
+  try {
+    Logger.log('=== CHECKING POSTS STATUS VALIDATION ===');
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Posts');
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var statusColIndex = headers.indexOf('Status');
+    var statusColLetter = String.fromCharCode(65 + statusColIndex);
+
+    Logger.log('Status column: ' + statusColLetter);
+
+    // Check validation on first 50 rows
+    var statusRange = sheet.getRange(statusColLetter + '2:' + statusColLetter + '50');
+    var validations = statusRange.getDataValidations();
+
+    var foundValidation = false;
+    for (var i = 0; i < validations.length; i++) {
+      if (validations[i][0] != null) {
+        foundValidation = true;
+        Logger.log('Validation at row ' + (i + 2));
+        Logger.log('  Type: ' + validations[i][0].getCriteriaType());
+        try {
+          Logger.log('  Values: ' + JSON.stringify(validations[i][0].getCriteriaValues()));
+        } catch (e) {}
+      }
+    }
+
+    if (!foundValidation) {
+      Logger.log('✅ No validation found');
+    }
+
+    return {success: true, foundValidation: foundValidation};
+
+  } catch (e) {
+    Logger.log('❌ Error: ' + e.message);
     return {success: false, error: e.message};
   }
 }

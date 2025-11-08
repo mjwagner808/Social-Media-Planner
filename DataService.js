@@ -199,32 +199,117 @@ function getClientById(clientId) {
 }
 
 /**
- * Update post status
+ * Update post status across all related sheets
+ * Updates: Posts, Post_Platforms, Post_Approvals
  */
 function updatePostStatus(postId, newStatus) {
-  var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Posts');
-  var data = sheet.getDataRange().getValues();
-  
-  // Find the post row
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === postId) { // Column A is ID
-      var statusColIndex = data[0].indexOf('Status');
-      var modifiedByColIndex = data[0].indexOf('Modified_By');
-      var modifiedDateColIndex = data[0].indexOf('Modified_Date');
-      
-      // Update status
-      sheet.getRange(i + 1, statusColIndex + 1).setValue(newStatus);
-      
-      // Update modified info
-      var currentUser = Session.getActiveUser().getEmail();
-      sheet.getRange(i + 1, modifiedByColIndex + 1).setValue(currentUser);
-      sheet.getRange(i + 1, modifiedDateColIndex + 1).setValue(new Date().toLocaleDateString());
-      
-      return {success: true, message: 'Status updated to ' + newStatus};
+  Logger.log('=== UPDATING POST STATUS ===');
+  Logger.log('Post ID: ' + postId);
+  Logger.log('New Status: ' + newStatus);
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var updated = {posts: false, platforms: false, approvals: false};
+
+  // 1. Update Posts sheet
+  var postsSheet = ss.getSheetByName('Posts');
+  var postsData = postsSheet.getDataRange().getValues();
+  Logger.log('Searching for Post ID: ' + postId + ' in Posts sheet (total rows: ' + (postsData.length - 1) + ')');
+
+  for (var i = 1; i < postsData.length; i++) {
+    if (postsData[i][0] === postId) {
+      Logger.log('Found post at row ' + (i + 1) + ', current status: ' + postsData[i][postsData[0].indexOf('Status')]);
+      var statusColIndex = postsData[0].indexOf('Status');
+      var modifiedByColIndex = postsData[0].indexOf('Modified_By');
+      var modifiedDateColIndex = postsData[0].indexOf('Modified_Date');
+
+      Logger.log('Setting status to: ' + newStatus + ' at row ' + (i + 1) + ', column ' + (statusColIndex + 1));
+
+      try {
+        postsSheet.getRange(i + 1, statusColIndex + 1).setValue(newStatus);
+        Logger.log('✅ Status cell updated');
+      } catch (statusError) {
+        Logger.log('❌ ERROR setting status: ' + statusError.message);
+        throw statusError;
+      }
+
+      try {
+        var currentUser = Session.getActiveUser().getEmail();
+        if (!currentUser || currentUser === '') {
+          currentUser = 'System';
+          Logger.log('⚠️ No active user, using "System"');
+        }
+        Logger.log('Setting Modified_By to: ' + currentUser);
+        postsSheet.getRange(i + 1, modifiedByColIndex + 1).setValue(currentUser);
+        postsSheet.getRange(i + 1, modifiedDateColIndex + 1).setValue(new Date().toLocaleDateString());
+        Logger.log('✅ Modified metadata updated');
+      } catch (metaError) {
+        Logger.log('⚠️ WARNING: Could not update metadata: ' + metaError.message);
+        // Don't fail the whole operation just because metadata couldn't be updated
+      }
+
+      updated.posts = true;
+      Logger.log('✅ Posts sheet updated at row ' + (i + 1));
+      break;
     }
   }
-  
-  return {success: false, error: 'Post not found'};
+
+  if (!updated.posts) {
+    Logger.log('⚠️ WARNING: Post ID ' + postId + ' NOT FOUND in Posts sheet!');
+  }
+
+  // 2. Update Post_Platforms sheet (if exists)
+  var platformsSheet = ss.getSheetByName('Post_Platforms');
+  if (platformsSheet) {
+    var platformsData = platformsSheet.getDataRange().getValues();
+    var platformsHeaders = platformsData[0];
+    var postIdColIndex = platformsHeaders.indexOf('Post_ID');
+    var statusColIndex = platformsHeaders.indexOf('Status');
+
+    if (postIdColIndex >= 0 && statusColIndex >= 0) {
+      for (var i = 1; i < platformsData.length; i++) {
+        if (platformsData[i][postIdColIndex] === postId) {
+          platformsSheet.getRange(i + 1, statusColIndex + 1).setValue(newStatus);
+          updated.platforms = true;
+        }
+      }
+      if (updated.platforms) {
+        Logger.log('✅ Post_Platforms sheet updated');
+      }
+    }
+  }
+
+  // 3. Update Post_Approvals sheet (if exists)
+  var approvalsSheet = ss.getSheetByName('Post_Approvals');
+  if (approvalsSheet) {
+    var approvalsData = approvalsSheet.getDataRange().getValues();
+    var approvalsHeaders = approvalsData[0];
+    var postIdColIndex = approvalsHeaders.indexOf('Post_ID');
+    var postStatusColIndex = approvalsHeaders.indexOf('Post_Status');
+
+    if (postIdColIndex >= 0 && postStatusColIndex >= 0) {
+      for (var i = 1; i < approvalsData.length; i++) {
+        if (approvalsData[i][postIdColIndex] === postId) {
+          approvalsSheet.getRange(i + 1, postStatusColIndex + 1).setValue(newStatus);
+          updated.approvals = true;
+        }
+      }
+      if (updated.approvals) {
+        Logger.log('✅ Post_Approvals sheet updated');
+      }
+    }
+  }
+
+  if (!updated.posts) {
+    Logger.log('❌ Post not found in Posts sheet');
+    return {success: false, error: 'Post not found'};
+  }
+
+  Logger.log('Status sync complete: Posts=' + updated.posts + ', Platforms=' + updated.platforms + ', Approvals=' + updated.approvals);
+  return {
+    success: true,
+    message: 'Status updated to ' + newStatus,
+    sheetsUpdated: updated
+  };
 }
 
 // --------- CONTENT CATEGORIES (reference) ---------
@@ -334,9 +419,12 @@ function getAllPostsWithImages() {
       if (mediaUrl) {
         var extractedUrl = extractUrlFromImageFormula(mediaUrl);
         if (extractedUrl) {
+          // Strict carousel detection - must exactly match "Carousel" (case-insensitive)
+          var isCarousel = String(mediaType).trim().toLowerCase() === 'carousel';
+
           imageMap[postId] = {
             url: extractedUrl,
-            isCarousel: String(mediaType).toLowerCase().indexOf('carousel') > -1
+            isCarousel: isCarousel
           };
         }
       }
@@ -374,7 +462,6 @@ function getAllPostsWithImages() {
 
 /**
  * Extract URL from =IMAGE("url", ...) formula or return the URL if it's plain text
- * Converts Box.com share links to direct download links
  */
 function extractUrlFromImageFormula(cellValue) {
   if (!cellValue) return null;
@@ -395,14 +482,21 @@ function extractUrlFromImageFormula(cellValue) {
     url = value;
   }
 
-  // Convert Box.com share links to direct download links
-  if (url && url.indexOf('box.com/s/') > -1) {
-    // Convert: https://finnpartners.box.com/s/xxxxx
-    // To: https://finnpartners.box.com/shared/static/xxxxx
-    url = url.replace('/s/', '/shared/static/');
+  return url;
+}
+
+/**
+ * Convert Box.com share URL to embeddable format (for <img> tags)
+ * Only use this for image preview - keep original /s/ URL for links
+ */
+function convertBoxUrlForImageEmbed(url) {
+  if (!url || url.indexOf('box.com/s/') === -1) {
+    return url; // Not a Box share URL, return as-is
   }
 
-  return url;
+  // Convert: https://finnpartners.box.com/s/xxxxx
+  // To: https://finnpartners.box.com/shared/static/xxxxx
+  return url.replace('/s/', '/shared/static/');
 }
 
 /**
@@ -491,15 +585,26 @@ function getPostById(postId) {
       var headers = platformData[0];
       var postIdIndex = headers.indexOf('Post_ID');
       var mediaUrlIndex = headers.indexOf('Media_File_URL');
+      var platformIndex = headers.indexOf('Platform');  // Use Platform column, not Platform_ID
+      var idIndex = headers.indexOf('ID');  // Use the record ID for unique matching
 
       // Attach media URLs to platforms
       for (var i = 0; i < platforms.length; i++) {
-        // Find matching row in sheet
+        // Find matching row in sheet by Post_ID and Platform name (or unique ID)
         for (var j = 1; j < platformData.length; j++) {
-          if (platformData[j][postIdIndex] === platforms[i].Post_ID &&
-              platformData[j][headers.indexOf('Platform_ID')] === platforms[i].Platform_ID) {
+          var rowPostId = platformData[j][postIdIndex];
+          var rowPlatform = platformData[j][platformIndex];
+          var rowId = platformData[j][idIndex];
+
+          // Match by unique ID first (most reliable), or by Post_ID + Platform name
+          var matchById = (platforms[i].ID && rowId === platforms[i].ID);
+          var matchByPostAndPlatform = (rowPostId === platforms[i].Post_ID &&
+                                       rowPlatform === platforms[i].Platform);
+
+          if (matchById || matchByPostAndPlatform) {
             var mediaUrl = platformFormulas[j][mediaUrlIndex] || platformData[j][mediaUrlIndex];
             platforms[i].Media_File_URL_Extracted = extractUrlFromImageFormula(mediaUrl);
+            platforms[i].Media_File_URL = platformData[j][mediaUrlIndex];  // Store raw value too
             break;
           }
         }
@@ -688,6 +793,43 @@ function addCommentToPost(postId, commentText, commentType) {
     commentsSheet.appendRow(rowData);
     Logger.log('Row appended to sheet at row: ' + commentsSheet.getLastRow());
 
+    // Create notifications for internal notes
+    if (commentType === 'Internal_Note') {
+      Logger.log('Creating notifications for internal note...');
+      try {
+        // Get the post to find who created it and who else has commented
+        var post = _getPostByIdSimple(postId);
+        var notifyEmails = [];
+
+        // Notify post creator (if not the commenter)
+        if (post && post.Created_By && post.Created_By !== currentUser) {
+          notifyEmails.push(post.Created_By);
+        }
+
+        // Notify other commenters (excluding current user)
+        var otherComments = _readSheetAsObjects_('Comments', {
+          filterFn: function(c) {
+            return c.Post_ID === postId && c.Commenter_Email && c.Commenter_Email !== currentUser;
+          }
+        });
+
+        otherComments.forEach(function(comment) {
+          if (comment.Commenter_Email && notifyEmails.indexOf(comment.Commenter_Email) === -1) {
+            notifyEmails.push(comment.Commenter_Email);
+          }
+        });
+
+        // Create notifications
+        Logger.log('Notifying ' + notifyEmails.length + ' users: ' + notifyEmails.join(', '));
+        notifyEmails.forEach(function(email) {
+          createNotificationForComment(email, postId, currentUser, commentText);
+        });
+      } catch (notifError) {
+        Logger.log('Warning: Failed to create notifications: ' + notifError.message);
+        // Don't fail the comment creation if notifications fail
+      }
+    }
+
     Logger.log('Comment added successfully: ' + commentId);
     return { success: true, commentId: commentId, message: 'Comment added successfully' };
 
@@ -706,17 +848,22 @@ function getCommentsForPost(postId) {
   try {
     var comments = _readSheetAsObjects_('Comments', {
       filterFn: function(c) {
-        return c.Post_ID === postId && String(c.Status || '').trim() === 'Active';
+        // Show all comments for this post (no Status filter to match client portal behavior)
+        return c.Post_ID === postId;
       },
       sortFn: function(a, b) {
-        var dateA = a.Comment_Date ? new Date(a.Comment_Date) : new Date(0);
-        var dateB = b.Comment_Date ? new Date(b.Comment_Date) : new Date(0);
+        // Handle both column name variants
+        var dateA = (a.Comment_Date || a.Created_Date) ? new Date(a.Comment_Date || a.Created_Date) : new Date(0);
+        var dateB = (b.Comment_Date || b.Created_Date) ? new Date(b.Comment_Date || b.Created_Date) : new Date(0);
         return dateB - dateA; // Most recent first
       },
       coerceFn: function(c) {
-        // Convert date to ISO string
-        if (c.Comment_Date && Object.prototype.toString.call(c.Comment_Date) === '[object Date]') {
-          c.Comment_Date = _toIso_(c.Comment_Date);
+        // Convert date to ISO string - handle both column name variants
+        var dateField = c.Comment_Date || c.Created_Date;
+        if (dateField && Object.prototype.toString.call(dateField) === '[object Date]') {
+          var isoDate = _toIso_(dateField);
+          if (c.Comment_Date) c.Comment_Date = isoDate;
+          if (c.Created_Date) c.Created_Date = isoDate;
         }
         return c;
       }

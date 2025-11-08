@@ -333,10 +333,38 @@ function validatePostData(postData) {
  */
 function sendEmail(recipient, subject, body) {
   try {
-    GmailApp.sendEmail(recipient, subject, body);
+    Logger.log('=== SENDING EMAIL ===');
+    Logger.log('To: ' + recipient);
+    Logger.log('Subject: ' + subject);
+    Logger.log('Body length: ' + body.length + ' chars');
+
+    // Validate recipient email
+    if (!recipient || recipient.trim() === '') {
+      throw new Error('Recipient email is empty');
+    }
+
+    // Check email format
+    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipient.trim())) {
+      throw new Error('Invalid email format: ' + recipient);
+    }
+
+    // Get current user's email quota info
+    var quotaRemaining = MailApp.getRemainingDailyQuota();
+    Logger.log('Daily email quota remaining: ' + quotaRemaining);
+
+    if (quotaRemaining === 0) {
+      throw new Error('Daily email quota exceeded (0 remaining)');
+    }
+
+    // Send email using GmailApp
+    GmailApp.sendEmail(recipient.trim(), subject, body);
+    Logger.log('✅ Email sent successfully to: ' + recipient);
+
     return {success: true};
   } catch (e) {
-    Logger.log('Error sending email: ' + e.message);
+    Logger.log('❌ ERROR sending email: ' + e.message);
+    Logger.log('Stack trace: ' + e.stack);
     return {success: false, error: e.message};
   }
 }

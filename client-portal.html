@@ -626,9 +626,9 @@
 
     // Load data from API using JSONP (to avoid CORS issues)
     function loadClientData() {
-      // Get token from URL
+      // Get token from server-side injected variable or URL parameter (fallback)
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
+      const token = '<?= accessToken ?>' || urlParams.get('token');
 
       if (!token) {
         showError('No access token provided. Please use the link sent to you by email.');
@@ -645,8 +645,9 @@
           allPosts = data.posts || [];
           filteredPosts = allPosts;
 
-          // Update UI
-          document.getElementById('welcomeTitle').textContent = 'Welcome, ' + clientInfo.Client_Name;
+          // Update UI - show email address for user identification
+          var displayName = clientInfo.Email || clientInfo.Client_Name;
+          document.getElementById('welcomeTitle').textContent = 'Welcome, ' + displayName;
           document.getElementById('clientInfo').textContent = clientInfo.Client_Name;
 
           showSuccess('Access granted. ' + allPosts.length + ' posts available.');
@@ -840,7 +841,11 @@
           const isCarousel = postItem.getAttribute('data-is-carousel') === 'true';
 
           if (imageUrl && !isCarousel) {
-            preview.innerHTML = '<img src="' + escapeHtml(imageUrl) + '" alt="Post preview">';
+            // Convert Box.com shared links to direct image URLs
+            var embedUrl = imageUrl.includes('box.com/s/')
+              ? imageUrl.replace('/s/', '/shared/static/')
+              : imageUrl;
+            preview.innerHTML = '<img src="' + escapeHtml(embedUrl) + '" alt="Post preview" onerror="this.style.display=\'none\'; this.parentElement.innerHTML+=\'<div style=\\\'padding:20px;text-align:center;\\\'>Image preview unavailable</div>\';">';
             preview.style.display = 'block';
             updatePreviewPosition(e);
           } else if (isCarousel) {
@@ -940,16 +945,40 @@
         html += '</div>';
       }
 
-      // Image
-      if (post.image_url && !post.is_carousel) {
+      // Media - Display all platform images
+      if (post.platforms && post.platforms.length > 0) {
         html += '<div class="modal-field">';
         html += '<div class="modal-field-label">Media</div>';
-        html += '<div class="modal-field-value"><img src="' + escapeHtml(post.image_url) + '" alt="Post image" class="modal-image"></div>';
+        html += '<div class="modal-field-value" style="display: flex; flex-direction: column; gap: 16px;">';
+
+        // Loop through all platforms
+        post.platforms.forEach(function(platform) {
+          html += '<div style="border: 1px solid #dadce0; border-radius: 4px; padding: 12px;">';
+          html += '<div style="font-weight: 500; color: #5f6368; margin-bottom: 8px; font-size: 13px;">' + escapeHtml(platform.platform) + '</div>';
+
+          if (platform.isCarousel) {
+            // Carousel - show link to Box
+            html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 3px solid #1a73e8;">';
+            html += '<p style="margin: 0 0 8px 0; font-size: 13px; color: #5f6368;">📸 Carousel (Multiple Images)</p>';
+            html += '<a href="' + escapeHtml(platform.url) + '" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 12px; word-break: break-all;">View in Box →</a>';
+            html += '</div>';
+          } else {
+            // Single image - try to display with Box URL conversion
+            var embedUrl = platform.url.includes('box.com/s/')
+              ? platform.url.replace('/s/', '/shared/static/')
+              : platform.url;
+
+            html += '<img src="' + escapeHtml(embedUrl) + '" style="max-width: 100%; max-height: 300px; border-radius: 4px; display: block;" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">';
+            html += '<div style="display: none; background: #f8f9fa; padding: 12px; border-radius: 4px;">';
+            html += '<p style="margin: 0 0 8px 0; color: #5f6368; font-size: 12px;">Image preview unavailable</p>';
+            html += '<a href="' + escapeHtml(platform.url) + '" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 13px;">View in Box →</a>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        });
+
         html += '</div>';
-      } else if (post.is_carousel) {
-        html += '<div class="modal-field">';
-        html += '<div class="modal-field-label">Media</div>';
-        html += '<div class="modal-field-value">📸 Carousel (multiple images)</div>';
         html += '</div>';
       }
 
@@ -980,7 +1009,21 @@
         html += '</div>';
         html += '<p style="font-size: 12px; color: #5f6368; margin-top: 8px;">💡 Tip: If approval buttons aren\'t working, use "Submit Comment Only" to share your feedback with the team.</p>';
       } else {
-        // For all other statuses, show comment-only section
+        // For all other statuses, show comment-only section with status explanation
+        var statusMessages = {
+          'Draft': 'This post is in Draft status. The team is still working on it.',
+          'Internal_Review': 'This post is currently in internal review. It will be sent to you for approval once internal review is complete.',
+          'Approved': 'This post has been approved and is ready for publishing.',
+          'Scheduled': 'This post is scheduled for publication.',
+          'Published': 'This post has been published.'
+        };
+        var statusMessage = statusMessages[status] || 'This post is currently in ' + status + ' status.';
+
+        html += '<div style="background: #e8f0fe; padding: 12px; border-radius: 4px; border-left: 3px solid #1a73e8; margin-bottom: 16px;">';
+        html += '<p style="margin: 0; font-size: 13px; color: #1967d2;"><strong>ℹ️ Status: ' + status.replace('_', ' ') + '</strong></p>';
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368;">' + statusMessage + ' You can still add comments below.</p>';
+        html += '</div>';
+
         html += '<div class="comment-section">';
         html += '<label for="commentType">Comment Type</label>';
         html += '<select id="commentType" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
@@ -1009,8 +1052,9 @@
     }
 
     function loadCommentHistory(postId) {
+      // Get token from server-side injected variable or URL parameter (fallback)
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
+      const token = '<?= accessToken ?>' || urlParams.get('token');
       const commentHistoryDiv = document.getElementById('commentHistory');
 
       if (!commentHistoryDiv) return;
@@ -1121,9 +1165,9 @@
     }
 
     function submitApprovalDecision(postId, decision, notes, commentType) {
-      // Get current token
+      // Get current token from server-side injected variable or URL parameter (fallback)
       const urlParams = new URLSearchParams(window.location.search);
-      const token = urlParams.get('token');
+      const token = '<?= accessToken ?>' || urlParams.get('token');
 
       // Show loading state
       const modal = document.getElementById('postModal');

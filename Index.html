@@ -296,6 +296,7 @@
         height: 6px;
         border-radius: 50%;
         flex-shrink: 0;
+        pointer-events: none; /* Allow hover events to pass through to parent */
       }
 
       /* Post Thumbnail */
@@ -307,6 +308,7 @@
         flex-shrink: 0;
         background: #e8eaed;
         border: 1px solid #dadce0;
+        pointer-events: none; /* Allow hover events to pass through to parent */
       }
 
       .post-thumbnail:error {
@@ -321,6 +323,7 @@
         border-radius: 2px;
         margin-left: 2px;
         flex-shrink: 0;
+        pointer-events: none; /* Allow hover events to pass through to parent */
       }
 
       /* Image hover preview */
@@ -873,6 +876,21 @@
     <div class="header">
       <h1>📅 Social Media Planner</h1>
       <div class="header-actions">
+        <div style="position: relative; display: inline-block;">
+          <button class="btn btn-secondary" onclick="toggleNotifications()" id="notificationBell" style="position: relative;">
+            🔔
+            <span class="badge" id="notification-count" style="display: none; position: absolute; top: -8px; right: -8px; background: #ea4335; color: white; border-radius: 10px; padding: 2px 6px; font-size: 11px; font-weight: bold;">0</span>
+          </button>
+          <div id="notificationDropdown" style="display: none; position: absolute; top: 45px; right: 0; width: 350px; max-height: 400px; overflow-y: auto; background: white; border: 1px solid #dadce0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000;">
+            <div style="padding: 12px; border-bottom: 1px solid #dadce0; display: flex; justify-content: space-between; align-items: center;">
+              <strong style="font-size: 14px;">Notifications</strong>
+              <button onclick="markAllNotificationsRead()" style="background: none; border: none; color: #1a73e8; font-size: 12px; cursor: pointer; padding: 4px 8px;">Mark all read</button>
+            </div>
+            <div id="notificationList" style="max-height: 340px; overflow-y: auto;">
+              <div style="padding: 20px; text-align: center; color: #5f6368;">Loading...</div>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-secondary" onclick="showApprovalDashboard()">
           📥 My Approvals<span class="badge" id="approval-count" style="display: none;">0</span>
         </button>
@@ -1050,9 +1068,9 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="required" for="postHashtags">Hashtags</label>
-                  <input type="text" id="postHashtags" name="hashtags" placeholder="#example #socialmedia" required>
-                  <small class="form-help">Separate with spaces</small>
+                  <label for="postHashtags">Hashtags</label>
+                  <input type="text" id="postHashtags" name="hashtags" placeholder="#example #socialmedia">
+                  <small class="form-help">Optional - Separate with spaces</small>
                 </div>
               </div>
 
@@ -1078,6 +1096,9 @@
                     <span style="color: #ea4335; font-weight: 600; margin-left: 4px;">🔒 PRIVATE</span>
                   </label>
                   <textarea id="postNotes" name="notes" rows="4" placeholder="Private notes for internal team only (client will NOT see this)..."></textarea>
+                  <small style="display: block; margin-top: 4px; color: #f9ab00; font-weight: 500;">
+                    ⚠️ When editing: Keep previous notes and add new ones below. Don't overwrite existing notes.
+                  </small>
                   <small class="form-help" style="color: #ea4335; font-weight: 500;">
                     ⚠️ These notes are PRIVATE and will NOT be shared with clients. Use for internal planning, budget info, strategy notes, or client preferences.
                   </small>
@@ -1126,8 +1147,8 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" onclick="closePostCreationForm()">Cancel</button>
           <div class="btn-group">
-            <button class="btn btn-secondary" type="button" onclick="savePostAsDraft()">Save as Draft</button>
-            <button class="btn btn-primary" type="button" onclick="submitPostForReview()">Submit for Review</button>
+            <button id="saveDraftBtn" class="btn btn-secondary" type="button" onclick="savePostAsDraft()">Save as Draft</button>
+            <button id="submitReviewBtn" class="btn btn-primary" type="button" onclick="submitPostForReview()">Submit for Review</button>
           </div>
         </div>
       </div>
@@ -1156,6 +1177,10 @@
     </div>
 
     <script>
+      // Server-side values (force-print with JavaScript string escaping)
+      const userName = "<?!= userName.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
+      const userRole = "<?!= userRole.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
+
       // Global state
       let currentMonth = new Date().getMonth();
       let currentYear = new Date().getFullYear();
@@ -1223,6 +1248,9 @@
 
                 // Setup image preview after calendar is rendered
                 setupImagePreview();
+
+                // Load approval badge count
+                loadApprovalCount();
               })
               .withFailureHandler(handleError)
               .getAllClients();
@@ -1423,7 +1451,7 @@
         document.querySelectorAll('.status-filter-btn').forEach(btn => {
           btn.classList.remove('active');
         });
-        document.querySelector(`[data-status="${status}"]`).classList.add('active');
+        document.querySelector('[data-status="' + status + '"]').classList.add('active');
 
         // Filter posts
         if (status === 'all') {
@@ -1443,6 +1471,20 @@
       function openPostDetail(postId) {
         // Store current post ID for edit functionality
         currentPostId = postId;
+
+        // Mark any notifications for this post as read (viewing = acknowledging)
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success && result.count > 0) {
+              // Refresh notification badge to reflect newly read notifications
+              loadNotifications();
+            }
+          })
+          .withFailureHandler(function(error) {
+            console.log('Could not mark notifications read:', error);
+            // Don't block opening the post if this fails
+          })
+          .markNotificationsReadForPost(postId);
 
         // Show modal with loading state
         document.getElementById('postDetailModal').classList.add('active');
@@ -1490,6 +1532,9 @@
 
       function displayPostDetail(post) {
         console.log('Displaying post:', post);
+
+        // Store post data globally for client access functions
+        window.currentPostData = post;
 
         // Format status badge
         const statusClass = (post.Status || 'Draft').replace(/ /g, '_');
@@ -1564,9 +1609,29 @@
               html += `<p style="margin: 0 0 8px 0;"><strong>Media Type:</strong> ${escapeHtml(platform.Media_Type)}</p>`;
             }
             if (platform.Media_File_URL_Extracted) {
+              const mediaType = (platform.Media_Type || '').toLowerCase();
+              const isCarousel = mediaType.includes('carousel');
+
               html += `<div style="margin-top: 8px;">`;
-              html += `<img src="${escapeHtml(platform.Media_File_URL_Extracted)}" style="max-width: 100%; max-height: 300px; border-radius: 4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">`;
-              html += `<p style="display: none; color: #5f6368; font-size: 12px;">Image failed to load</p>`;
+              if (isCarousel) {
+                // For carousels, show the actual link as clickable text
+                html += `<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 3px solid #1a73e8;">`;
+                html += `<p style="margin: 0 0 8px 0; font-size: 13px; color: #5f6368;">📸 Carousel (Multiple Images)</p>`;
+                html += `<a href="${escapeHtml(platform.Media_File_URL_Extracted)}" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 12px; word-break: break-all;">${escapeHtml(platform.Media_File_URL_Extracted)}</a>`;
+                html += `</div>`;
+              } else {
+                // For single images/videos, try to display
+                // Convert Box /s/ URLs to /shared/static/ for embedding
+                const embedUrl = platform.Media_File_URL_Extracted.includes('box.com/s/')
+                  ? platform.Media_File_URL_Extracted.replace('/s/', '/shared/static/')
+                  : platform.Media_File_URL_Extracted;
+
+                html += `<img src="${escapeHtml(embedUrl)}" style="max-width: 100%; max-height: 300px; border-radius: 4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">`;
+                html += `<div style="display: none; background: #f8f9fa; padding: 12px; border-radius: 4px;">`;
+                html += `<p style="margin: 0 0 8px 0; color: #5f6368; font-size: 12px;">Image preview unavailable</p>`;
+                html += `<a href="${escapeHtml(platform.Media_File_URL_Extracted)}" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 13px;">View in Box →</a>`;
+                html += `</div>`;
+              }
               html += '</div>';
             }
             html += '</div>';
@@ -1593,6 +1658,45 @@
         if (post.Client_Approvers) {
           html += `<p><strong>Client Approvers:</strong> ${escapeHtml(post.Client_Approvers)}</p>`;
         }
+        html += '</div>';
+
+        // Client Access Section (only for Client_Review status)
+        html += '<div id="clientAccessSection" style="display: none;">';
+        html += '<div class="detail-section" style="background: #e8f0fe; padding: 16px; border-radius: 4px;">';
+        html += '<h4 style="color: #1a73e8;">🔗 Client Portal Access</h4>';
+
+        // Token status
+        html += '<div id="clientTokenStatus">';
+        html += '<p style="color: #5f6368;">Loading access status...</p>';
+        html += '</div>';
+
+        // Token generator (if no token exists)
+        html += '<div id="clientTokenGenerator" style="display: none; margin-top: 12px;">';
+        html += '<p style="margin-bottom: 12px;">This client approver doesn\'t have portal access yet.</p>';
+        html += '<button class="btn btn-primary" onclick="generateClientToken()">Generate Access Token</button>';
+        html += '<div style="background: #e8f0fe; padding: 12px; margin-top: 12px; border-radius: 4px; border-left: 3px solid #1a73e8;">';
+        html += '<p style="margin: 0; font-size: 13px; color: #1967d2;"><strong>📋 Next Step:</strong> After generating the token, click "Email Link to Client" to copy an email template. Paste it into your email client and send it to the client approver.</p>';
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368;">Future approval requests will automatically email this client approver.</p>';
+        html += '</div>';
+        html += '</div>';
+
+        // Portal URL (if token exists)
+        html += '<div id="clientPortalUrl" style="display: none; margin-top: 12px;">';
+        html += '<p style="margin-bottom: 8px;"><strong>Client Portal URL:</strong></p>';
+        html += '<div style="background: white; padding: 12px; border-radius: 4px; border: 1px solid #dadce0; display: flex; gap: 8px; align-items: center;">';
+        html += '<input type="text" id="portalUrlInput" readonly style="flex: 1; border: none; font-family: monospace; font-size: 12px; padding: 4px;" value="">';
+        html += '<button class="btn btn-secondary" onclick="copyPortalUrl(event)">📋 Copy</button>';
+        html += '</div>';
+        html += '<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">';
+        html += '<button class="btn btn-secondary" onclick="emailPortalLink()">📧 Email Link to Client</button>';
+        html += '<button class="btn btn-warning" onclick="revokeClientToken()" style="background: #ea4335; color: white;">🔒 Revoke Access</button>';
+        html += '</div>';
+        html += '<div style="background: #e8f0fe; padding: 12px; margin-top: 12px; border-radius: 4px; border-left: 3px solid #1a73e8;">';
+        html += '<p style="margin: 0; font-size: 12px; color: #5f6368;">ℹ️ This client has portal access. When you submit posts for client review, they will automatically receive email notifications with a link to approve or comment.</p>';
+        html += '</div>';
+        html += '</div>';
+
+        html += '</div>';
         html += '</div>';
 
         // Comments section (will be loaded separately)
@@ -1662,6 +1766,9 @@
         // Update footer with action buttons based on status
         updatePostDetailActions(post);
 
+        // Check client access status if in Client_Review
+        checkClientAccess(post);
+
         // Load comments separately to avoid slowing down initial display
         loadComments(post.ID);
       }
@@ -1688,9 +1795,11 @@
 
         let html = '<div style="display: flex; flex-direction: column; gap: 12px;">';
         comments.forEach(comment => {
-          const date = comment.Comment_Date ? new Date(comment.Comment_Date).toLocaleString() : '';
+          // Handle both column name variants (Comment_Date vs Created_Date, Comment_Type vs Commenter_Type)
+          const dateValue = comment.Comment_Date || comment.Created_Date;
+          const date = dateValue ? new Date(dateValue).toLocaleString() : '';
           const commenter = comment.Commenter_Email || 'Unknown';
-          const commentType = comment.Comment_Type || 'Internal_Note';
+          const commentType = comment.Comment_Type || comment.Commenter_Type || 'Internal_Note';
 
           // Format comment type for display
           const typeLabel = commentType.replace(/_/g, ' ');
@@ -1726,11 +1835,16 @@
 
         // Add status change buttons based on current status (in the middle)
         if (post.Status === 'Draft') {
-          html += ' <button class="btn btn-primary" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Internal_Review\')">Submit for Review</button>';
+          html += ' <button class="btn btn-primary" type="button" onclick="submitPostForInternalReview(\'' + post.ID + '\')">Submit for Internal Review</button>';
+          html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', true)">📤 Submit for Client Review (Skip Internal)</button>';
         } else if (post.Status === 'Internal_Review') {
+          html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', false)">📤 Submit for Client Review</button>';
+          html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', true)">📤 Skip to Client Review</button>';
           html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
           html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
         } else if (post.Status === 'Client_Review') {
+          // Allow submitting for client review again (in case need to add more reviewers)
+          html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', false)">📤 Re-submit for Client Review</button>';
           html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
           html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
         } else if (post.Status === 'Approved') {
@@ -1810,6 +1924,9 @@
         // Store the post ID for updating
         window.editingPostId = post.ID;
 
+        // Store the post data globally for reference
+        window.currentEditingPost = post;
+
         // Open the post creation modal
         document.getElementById('postCreationModal').classList.add('active');
 
@@ -1836,10 +1953,37 @@
                 return;
               }
               formOptions = options;
-              populateFormDropdowns();
 
-              // Now populate the post data after dropdowns are ready
-              populatePostFields(post);
+              // Wait for modal to be fully rendered before populating
+              setTimeout(function() {
+                populateFormDropdowns();
+
+                // Now populate the post data after dropdowns are ready
+                populatePostFields(post);
+
+                // Double-check critical fields after another delay to ensure they stick
+                setTimeout(function() {
+                  if (post.Scheduled_Date) {
+                    let dateStr = post.Scheduled_Date;
+                    if (typeof dateStr === 'string' && dateStr.includes('T')) {
+                      dateStr = dateStr.split('T')[0];
+                    }
+                    const dateInput = document.getElementById('scheduledDate');
+                    if (!dateInput.value || dateInput.value === '') {
+                      console.warn('Date was cleared, re-setting to:', dateStr);
+                      dateInput.value = dateStr;
+                    }
+                  }
+
+                  if (post.Hashtags) {
+                    const hashtagsInput = document.getElementById('postHashtags');
+                    if (!hashtagsInput.value || hashtagsInput.value === '') {
+                      console.warn('Hashtags were cleared, re-setting to:', post.Hashtags);
+                      hashtagsInput.value = post.Hashtags;
+                    }
+                  }
+                }, 200);
+              }, 100);
             })
             .withFailureHandler(function(error) {
               alert('Error loading form options: ' + error.message);
@@ -1847,11 +1991,37 @@
             .getFormOptions();
         } else {
           // Form options already loaded, re-populate dropdowns then fields
-          populateFormDropdowns();
-
-          // Small delay to ensure DOM is updated before populating fields
+          // Wait for modal to be fully rendered before populating
           setTimeout(function() {
-            populatePostFields(post);
+            populateFormDropdowns();
+
+            // Small delay to ensure DOM is updated before populating fields
+            setTimeout(function() {
+              populatePostFields(post);
+
+              // Double-check critical fields after another delay to ensure they stick
+              setTimeout(function() {
+                if (post.Scheduled_Date) {
+                  let dateStr = post.Scheduled_Date;
+                  if (typeof dateStr === 'string' && dateStr.includes('T')) {
+                    dateStr = dateStr.split('T')[0];
+                  }
+                  const dateInput = document.getElementById('scheduledDate');
+                  if (!dateInput.value || dateInput.value === '') {
+                    console.warn('Date was cleared, re-setting to:', dateStr);
+                    dateInput.value = dateStr;
+                  }
+                }
+
+                if (post.Hashtags) {
+                  const hashtagsInput = document.getElementById('postHashtags');
+                  if (!hashtagsInput.value || hashtagsInput.value === '') {
+                    console.warn('Hashtags were cleared, re-setting to:', post.Hashtags);
+                    hashtagsInput.value = post.Hashtags;
+                  }
+                }
+              }, 200);
+            }, 100);
           }, 100);
         }
       }
@@ -1877,10 +2047,15 @@
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
-            dateStr = `${year}-${month}-${day}`;
+            dateStr = year + '-' + month + '-' + day;
           }
           console.log('Setting date to:', dateStr, 'from:', post.Scheduled_Date);
-          document.getElementById('scheduledDate').value = dateStr;
+          const dateInput = document.getElementById('scheduledDate');
+          if (dateInput) {
+            dateInput.value = dateStr;
+            // Store in data attribute as backup
+            dateInput.setAttribute('data-original-value', dateStr);
+          }
         }
 
         document.getElementById('scheduledTime').value = post.Scheduled_Time || '';
@@ -1914,7 +2089,7 @@
               if (post.Subsidiary_IDs) {
                 const subIds = post.Subsidiary_IDs.split(',').map(id => id.trim());
                 subIds.forEach(subId => {
-                  const checkbox = document.querySelector(`input[name="subsidiaryIds"][value="${subId}"]`);
+                  const checkbox = document.querySelector('input[name="subsidiaryIds"][value="' + subId + '"]');
                   if (checkbox) checkbox.checked = true;
                 });
               }
@@ -1957,6 +2132,12 @@
           });
         }
 
+        // Populate client approvers (textarea field)
+        if (post.Client_Approvers) {
+          console.log('Setting client approvers to:', post.Client_Approvers);
+          document.getElementById('clientApprovers').value = post.Client_Approvers;
+        }
+
         // Load platforms
         console.log('Post platforms:', post.platforms);
         if (post.platforms && post.platforms.length > 0) {
@@ -1977,7 +2158,7 @@
           // Update platform checkboxes (checkboxes use Platform_Name as value)
           selectedPlatforms.forEach(platformName => {
             console.log('Looking for platform checkbox with value:', platformName);
-            const checkbox = document.querySelector(`input[value="${platformName}"]`);
+            const checkbox = document.querySelector('input[value="' + platformName + '"]');
             console.log('Found checkbox:', checkbox);
             if (checkbox) {
               checkbox.checked = true;
@@ -2053,8 +2234,42 @@
 
       // Show approval dashboard
       function showApprovalDashboard() {
-        // For now, just alert. In next phase, show approval modal or navigate to approval page
-        alert('Approval dashboard integration coming in next phase!\n\nFor now, you can use the existing approval dashboard from the main menu.');
+        // Open ApprovalDashboard.html in a modal iframe
+        const modal = document.createElement('div');
+        modal.id = 'approvalDashboardModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = 'background: white; width: 90%; max-width: 1200px; height: 90%; border-radius: 8px; position: relative; display: flex; flex-direction: column;';
+
+        const modalHeader = document.createElement('div');
+        modalHeader.style.cssText = 'padding: 20px; border-bottom: 1px solid #dadce0; display: flex; justify-content: space-between; align-items: center;';
+        modalHeader.innerHTML = '<h2 style="margin: 0; color: #1a73e8;">📋 My Pending Approvals</h2><button onclick="closeApprovalDashboard()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #5f6368;">&times;</button>';
+
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'width: 100%; height: 100%; border: none; flex: 1;';
+        iframe.src = '<?= ScriptApp.getService().getUrl() ?>?page=approvals';
+
+        modalContent.appendChild(modalHeader);
+        modalContent.appendChild(iframe);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+
+        // Close on background click
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            closeApprovalDashboard();
+          }
+        });
+      }
+
+      function closeApprovalDashboard() {
+        const modal = document.getElementById('approvalDashboardModal');
+        if (modal) {
+          modal.remove();
+          // Refresh calendar to show any status changes from approvals
+          loadCalendarData();
+        }
       }
 
       // Utility function
@@ -2065,11 +2280,20 @@
       }
 
       // Image preview functions
+      let imagePreviewSetup = false; // Prevent duplicate listeners
+
       function setupImagePreview() {
+        if (imagePreviewSetup) return; // Already set up
+
         const preview = document.getElementById('imagePreview');
         const calendarTable = document.getElementById('calendar-table');
 
-        if (!calendarTable) return;
+        if (!calendarTable || !preview) {
+          console.log('Calendar table or preview not found');
+          return;
+        }
+
+        console.log('Setting up image preview listeners');
 
         // Event delegation for mouseenter
         calendarTable.addEventListener('mouseover', function(e) {
@@ -2077,25 +2301,63 @@
           if (postItem) {
             const imageUrl = postItem.getAttribute('data-image-url');
             if (imageUrl) {
+              console.log('Showing preview for:', imageUrl);
+
+              // Convert Box.com shared links to direct image URLs
+              const embedUrl = imageUrl.includes('box.com/s/')
+                ? imageUrl.replace('/s/', '/shared/static/')
+                : imageUrl;
+
               const img = preview.querySelector('img');
-              img.src = imageUrl;
+              img.src = embedUrl;
+              img.onerror = function() {
+                console.log('Image failed to load:', embedUrl);
+                preview.classList.remove('active');
+              };
               preview.classList.add('active');
 
-              // Position near the item
+              // Position near the item, but keep within viewport
               const rect = postItem.getBoundingClientRect();
-              preview.style.left = (rect.right + 10) + 'px';
-              preview.style.top = rect.top + 'px';
+              const previewWidth = 156; // 150px + 6px border/padding
+              const previewHeight = 156;
+
+              // Calculate position to the right of the item
+              let left = rect.right + 10;
+              let top = rect.top;
+
+              // If preview would go off right edge, position to the left instead
+              if (left + previewWidth > window.innerWidth) {
+                left = rect.left - previewWidth - 10;
+              }
+
+              // If preview would go off bottom edge, adjust top position
+              if (top + previewHeight > window.innerHeight) {
+                top = window.innerHeight - previewHeight - 10;
+              }
+
+              // Don't let it go off the top edge
+              if (top < 10) {
+                top = 10;
+              }
+
+              preview.style.left = left + 'px';
+              preview.style.top = top + 'px';
             }
           }
         });
 
-        // Event delegation for mouseleave
+        // Event delegation for mouseleave - use relatedTarget to avoid flickering
         calendarTable.addEventListener('mouseout', function(e) {
+          // Only hide if we're actually leaving the post item (not just moving to a child)
           const postItem = e.target.closest('.post-item[data-image-url]');
-          if (postItem) {
+          if (postItem && !postItem.contains(e.relatedTarget)) {
+            console.log('Hiding preview');
             preview.classList.remove('active');
           }
         });
+
+        imagePreviewSetup = true;
+        console.log('Image preview setup complete');
       }
 
       // Post Creation Form Functions
@@ -2154,6 +2416,10 @@
       function populateFormDropdowns() {
         // Populate clients
         const clientSelect = document.getElementById('postClient');
+        if (!clientSelect) {
+          console.error('Client select element not found - modal may not be ready yet');
+          return;
+        }
         clientSelect.innerHTML = '<option value="">Select a client...</option>';
         formOptions.clients.forEach(client => {
           const option = document.createElement('option');
@@ -2168,10 +2434,9 @@
         formOptions.platforms.forEach(platform => {
           const label = document.createElement('label');
           label.className = 'checkbox-item';
-          label.innerHTML = `
-            <input type="checkbox" value="${platform.Platform_Name}" onchange="togglePlatformMedia('${platform.Platform_Name}')">
-            <span>${platform.Platform_Name}</span>
-          `;
+          label.innerHTML =
+            '<input type="checkbox" value="' + platform.Platform_Name + '" onchange="togglePlatformMedia(\'' + platform.Platform_Name + '\')">' +
+            '<span>' + platform.Platform_Name + '</span>';
           platformsContainer.appendChild(label);
         });
 
@@ -2208,10 +2473,9 @@
         subsidiaries.forEach(sub => {
           const label = document.createElement('label');
           label.className = 'checkbox-item';
-          label.innerHTML = `
-            <input type="checkbox" name="subsidiaryIds" value="${sub.ID}">
-            <span>${sub.Subsidiary_Name}</span>
-          `;
+          label.innerHTML =
+            '<input type="checkbox" name="subsidiaryIds" value="' + sub.ID + '">' +
+            '<span>' + sub.Subsidiary_Name + '</span>';
           subsidiariesContainer.appendChild(label);
         });
       }
@@ -2243,23 +2507,22 @@
           mediaArea = document.createElement('div');
           mediaArea.id = 'platform-media-' + platformName;
           mediaArea.className = 'platform-media active';
-          mediaArea.innerHTML = `
-            <div class="platform-media-title">${platformName} Media</div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="media-url-${platformName}">Media URL (Box.com link)</label>
-                <input type="url" id="media-url-${platformName}" placeholder="https://box.com/...">
-              </div>
-              <div class="form-group">
-                <label for="media-type-${platformName}">Media Type</label>
-                <select id="media-type-${platformName}">
-                  <option value="Image">Image</option>
-                  <option value="Video">Video</option>
-                  <option value="Carousel">Carousel</option>
-                </select>
-              </div>
-            </div>
-          `;
+          mediaArea.innerHTML =
+            '<div class="platform-media-title">' + platformName + ' Media</div>' +
+            '<div class="form-row">' +
+              '<div class="form-group">' +
+                '<label for="media-url-' + platformName + '">Media URL (Box.com link)</label>' +
+                '<input type="url" id="media-url-' + platformName + '" placeholder="https://box.com/...">' +
+              '</div>' +
+              '<div class="form-group">' +
+                '<label for="media-type-' + platformName + '">Media Type</label>' +
+                '<select id="media-type-' + platformName + '">' +
+                  '<option value="Image">Image</option>' +
+                  '<option value="Video">Video</option>' +
+                  '<option value="Carousel">Carousel</option>' +
+                '</select>' +
+              '</div>' +
+            '</div>';
           platformMediaContainer.appendChild(mediaArea);
         }
 
@@ -2275,7 +2538,8 @@
       }
 
       function togglePlatformMedia(platformName) {
-        const checkbox = event.target;
+        // Find the checkbox that triggered this event
+        const checkbox = document.querySelector('input[type="checkbox"][value="' + platformName + '"]');
         const platformMediaContainer = document.getElementById('platformMediaContainer');
 
         if (checkbox.checked) {
@@ -2288,23 +2552,22 @@
           const mediaArea = document.createElement('div');
           mediaArea.id = 'platform-media-' + platformName;
           mediaArea.className = 'platform-media active';
-          mediaArea.innerHTML = `
-            <div class="platform-media-title">${platformName} Media</div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="media-url-${platformName}">Media URL (Box.com link)</label>
-                <input type="url" id="media-url-${platformName}" placeholder="https://box.com/...">
-              </div>
-              <div class="form-group">
-                <label for="media-type-${platformName}">Media Type</label>
-                <select id="media-type-${platformName}">
-                  <option value="Image">Image</option>
-                  <option value="Video">Video</option>
-                  <option value="Carousel">Carousel</option>
-                </select>
-              </div>
-            </div>
-          `;
+          mediaArea.innerHTML =
+            '<div class="platform-media-title">' + platformName + ' Media</div>' +
+            '<div class="form-row">' +
+              '<div class="form-group">' +
+                '<label for="media-url-' + platformName + '">Media URL (Box.com link)</label>' +
+                '<input type="url" id="media-url-' + platformName + '" placeholder="https://box.com/...">' +
+              '</div>' +
+              '<div class="form-group">' +
+                '<label for="media-type-' + platformName + '">Media Type</label>' +
+                '<select id="media-type-' + platformName + '">' +
+                  '<option value="Image">Image</option>' +
+                  '<option value="Video">Video</option>' +
+                  '<option value="Carousel">Carousel</option>' +
+                '</select>' +
+              '</div>' +
+            '</div>';
           platformMediaContainer.appendChild(mediaArea);
         } else {
           // Remove platform from selected list
@@ -2337,9 +2600,7 @@
         if (!document.getElementById('postCopy').value.trim()) {
           errors.push('Post copy is required');
         }
-        if (!document.getElementById('postHashtags').value.trim()) {
-          errors.push('Hashtags are required');
-        }
+        // Hashtags are now optional - removed validation
         if (!document.getElementById('scheduledDate').value) {
           errors.push('Scheduled date is required');
         }
@@ -2407,6 +2668,8 @@
         }
 
         const formData = collectFormData(false);
+        // Force status to Draft when clicking "Save as Draft"
+        formData.status = 'Draft';
         submitPost(formData);
       }
 
@@ -2422,11 +2685,15 @@
       }
 
       function submitPost(formData) {
-        // Show loading state
-        const submitBtn = event.target;
-        const originalText = submitBtn.textContent;
-        submitBtn.textContent = 'Saving...';
-        submitBtn.disabled = true;
+        // Find the submit button based on what was clicked
+        // Try both buttons (save draft or submit for review)
+        const submitBtn = document.getElementById('submitReviewBtn') || document.getElementById('saveDraftBtn');
+        const originalText = submitBtn ? submitBtn.textContent : '';
+
+        if (submitBtn) {
+          submitBtn.textContent = 'Saving...';
+          submitBtn.disabled = true;
+        }
 
         hideFormMessages();
 
@@ -2435,8 +2702,10 @@
         const postId = window.editingPostId;
 
         const successHandler = function(result) {
-          submitBtn.textContent = originalText;
-          submitBtn.disabled = false;
+          if (submitBtn) {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+          }
 
           if (result.success) {
             showFormSuccess(result.message);
@@ -2456,8 +2725,10 @@
         };
 
         const failureHandler = function(error) {
-          submitBtn.textContent = originalText;
-          submitBtn.disabled = false;
+          if (submitBtn) {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+          }
           showFormError('Error: ' + error.message);
         };
 
@@ -2503,6 +2774,439 @@
         document.getElementById('formError').classList.remove('active');
         document.getElementById('formSuccess').classList.remove('active');
       }
+
+      // =====================================================
+      // CLIENT PORTAL ACCESS MANAGEMENT
+      // =====================================================
+
+      function checkClientAccess(post) {
+        if (post.Status !== 'Client_Review') {
+          document.getElementById('clientAccessSection').style.display = 'none';
+          return;
+        }
+
+        document.getElementById('clientAccessSection').style.display = 'block';
+
+        // Check if client already has access
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.hasAccess) {
+              // Show portal URL
+              document.getElementById('clientTokenGenerator').style.display = 'none';
+              document.getElementById('clientPortalUrl').style.display = 'block';
+
+              // Use stored Access_URL from database (or fallback to constructing it)
+              const portalUrl = result.accessUrl || ('https://script.google.com/macros/s/AKfycbwiRbuwQTrj--xfmP7klfZ_TJratdAySuujz3oSZ3-31SgTY0KA5Zsz75BDLBU-sCCV/exec?page=client&token=' + result.token);
+              document.getElementById('portalUrlInput').value = portalUrl;
+
+              // Extract first email for display
+              const firstEmail = post.Client_Approvers ? post.Client_Approvers.split(',')[0].trim() : 'unknown';
+
+              document.getElementById('clientTokenStatus').innerHTML =
+                '<p style="color: #34a853;">✅ ' + firstEmail + ' has portal access</p>' +
+                '<p style="font-size: 13px; color: #5f6368;">Last login: ' + (result.lastLogin || 'Never') + '</p>';
+            } else {
+              // Show token generator
+              document.getElementById('clientTokenGenerator').style.display = 'block';
+              document.getElementById('clientPortalUrl').style.display = 'none';
+
+              // Extract first email for display
+              const firstEmail = post.Client_Approvers ? post.Client_Approvers.split(',')[0].trim() : 'unknown';
+
+              document.getElementById('clientTokenStatus').innerHTML = `
+                <p style="color: #f9ab00;">⚠️ ${firstEmail} doesn't have portal access yet</p>
+                <p style="font-size: 13px; color: #5f6368;">Token will be generated for the first client approver email.</p>
+              `;
+            }
+          })
+          .withFailureHandler(function(error) {
+            document.getElementById('clientTokenStatus').innerHTML =
+              '<p style="color: #ea4335;">❌ Error checking access: ' + error.message + '</p>';
+          })
+          .checkClientHasAccess(post.Client_ID, post.Client_Approvers);
+      }
+
+      function generateClientToken() {
+        console.log('=== generateClientToken called ===');
+        const post = window.currentPostData;
+        console.log('Post data:', post);
+
+        if (!post) {
+          alert('Error: Post data not found');
+          return;
+        }
+
+        if (!post.Client_Approvers || post.Client_Approvers.trim() === '') {
+          alert('❌ Error: No client approver email found. Please add a client approver to this post first.');
+          return;
+        }
+
+        console.log('About to show confirmation dialog...');
+        if (!confirm('Generate portal access for this client?')) {
+          console.log('User cancelled token generation');
+          return;
+        }
+
+        console.log('Calling grantClientAccessForPost with:', {
+          postId: post.ID,
+          clientId: post.Client_ID,
+          approvers: post.Client_Approvers
+        });
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            console.log('Success handler called:', result);
+            if (result.success) {
+              alert('✅ Client access granted!\n\nAccess URL has been generated. Use the "Copy" button below to share it with the client.');
+              // Refresh to show URL
+              checkClientAccess(post);
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to generate token'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            console.error('Failure handler called:', error);
+            alert('❌ Error: ' + error.message);
+          })
+          .grantClientAccessForPost(post.ID, post.Client_ID, post.Client_Approvers);
+
+        console.log('google.script.run call initiated');
+      }
+
+      function copyPortalUrl(event) {
+        const input = document.getElementById('portalUrlInput');
+        input.select();
+        input.setSelectionRange(0, 99999); // For mobile devices
+
+        try {
+          document.execCommand('copy');
+
+          // Show feedback
+          const button = event.target;
+          const originalText = button.textContent;
+          const originalBg = button.style.background;
+
+          button.textContent = '✅ Copied!';
+          button.style.background = '#34a853';
+
+          setTimeout(function() {
+            button.textContent = originalText;
+            button.style.background = originalBg;
+          }, 2000);
+        } catch (err) {
+          alert('Failed to copy. Please copy manually: ' + input.value);
+        }
+      }
+
+      function emailPortalLink() {
+        const post = window.currentPostData;
+        const portalUrl = document.getElementById('portalUrlInput').value;
+
+        if (!post) {
+          alert('Error: Post data not found');
+          return;
+        }
+
+        const emailTemplate = 'Subject: Review Your Social Media Posts\n\n' +
+          'Hi,\n\n' +
+          'You can now review and approve your upcoming social media posts online!\n\n' +
+          'Access your content calendar here:\n' +
+          portalUrl + '\n\n' +
+          'Features:\n' +
+          '✅ View all scheduled posts\n' +
+          '✅ Approve or request changes\n' +
+          '✅ Add comments and feedback\n' +
+          '✅ No login required - just bookmark this link\n\n' +
+          'Please keep this link private as it\'s unique to your account.\n\n' +
+          'Questions? Just reply to this email.\n\n' +
+          'Best regards,\n' +
+          userName;
+
+        if (confirm('Copy email template to clipboard?')) {
+          const tempArea = document.createElement('textarea');
+          tempArea.value = emailTemplate;
+          tempArea.style.position = 'fixed';
+          tempArea.style.left = '-9999px';
+          document.body.appendChild(tempArea);
+          tempArea.select();
+
+          try {
+            document.execCommand('copy');
+            document.body.removeChild(tempArea);
+            alert('✅ Email template copied to clipboard!\n\nPaste into your email client and send to:\n' + post.Client_Approvers);
+          } catch (err) {
+            document.body.removeChild(tempArea);
+            alert('Failed to copy. Please copy manually.');
+          }
+        }
+      }
+
+      function revokeClientToken() {
+        const post = window.currentPostData;
+
+        if (!post) {
+          alert('Error: Post data not found');
+          return;
+        }
+
+        if (!confirm('⚠️ Revoke client portal access?\n\nThe client will no longer be able to view or approve posts.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Client access revoked');
+              checkClientAccess(post);
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to revoke access'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .revokeClientAccessForClient(post.Client_ID);
+      }
+
+      function submitPostForInternalReview(postId) {
+        if (!confirm('Submit this post for internal review?\n\nApproval records will be created and the post status will change to Internal Review.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              const emailMsg = result.approverCount > 0
+                ? '\n\n📧 Email notifications sent to ' + result.approverCount + ' internal approver(s)'
+                : '\n\n⚠️ No email sent (no approvers configured)';
+              alert('✅ Post submitted for internal review!' + emailMsg);
+              // Refresh post detail
+              openPostDetail(postId);
+              // Refresh calendar
+              loadCalendarData();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to submit for review'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .submitForInternalReview(postId);
+      }
+
+      function submitPostForClientReview(postId, skipInternal) {
+        const skipMsg = skipInternal ? ' (skipping internal review)' : '';
+        if (!confirm('Submit this post for client review' + skipMsg + '?\n\nAn approval record will be created and the post status will change to Client Review.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              const emailMsg = result.approverCount > 0
+                ? '\n\n📧 Email notifications sent to ' + result.approverCount + ' approver(s)'
+                : '\n\n⚠️ No email sent (no approvers configured)';
+              alert('✅ Post submitted for client review!' + emailMsg);
+              // Refresh post detail
+              openPostDetail(postId);
+              // Refresh calendar
+              loadCalendarData();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to submit for review'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .submitForClientReview(postId, skipInternal);
+      }
+
+    // =====================================================
+    // NOTIFICATION SYSTEM
+    // =====================================================
+
+    /**
+     * Toggle notification dropdown visibility
+     */
+    function toggleNotifications() {
+      const dropdown = document.getElementById('notificationDropdown');
+      const isVisible = dropdown.style.display === 'block';
+
+      if (isVisible) {
+        dropdown.style.display = 'none';
+      } else {
+        dropdown.style.display = 'block';
+        loadNotifications();
+      }
+    }
+
+    /**
+     * Load unread notifications from server
+     */
+    function loadNotifications() {
+      document.getElementById('notificationList').innerHTML =
+        '<div style="padding: 20px; text-align: center; color: #5f6368;">Loading...</div>';
+
+      google.script.run
+        .withSuccessHandler(displayNotifications)
+        .withFailureHandler(function(error) {
+          console.error('Error loading notifications:', error);
+          document.getElementById('notificationList').innerHTML =
+            '<div style="padding: 20px; text-align: center; color: #ea4335;">Error loading notifications</div>';
+        })
+        .getUnreadNotifications('<?= userEmail ?>');
+    }
+
+    /**
+     * Display notifications in dropdown
+     */
+    function displayNotifications(notifications) {
+      const listContainer = document.getElementById('notificationList');
+
+      if (!notifications || notifications.length === 0) {
+        listContainer.innerHTML =
+          '<div style="padding: 20px; text-align: center; color: #5f6368;">No new notifications</div>';
+        updateNotificationBadge(0);
+        return;
+      }
+
+      let html = '';
+      notifications.forEach(function(notification) {
+        const timeAgo = getTimeAgo(notification.Created_Date);
+        const icon = getNotificationIcon(notification.Type);
+
+        html += '<div class="notification-item" onclick="handleNotificationClick(\'' + notification.ID + '\', \'' + (notification.Post_ID || '') + '\')" style="padding: 12px; border-bottom: 1px solid #f1f3f4; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background=\'#f8f9fa\'" onmouseout="this.style.background=\'white\'">';
+        html += '  <div style="display: flex; align-items: start; gap: 8px;">';
+        html += '    <span style="font-size: 16px;">' + icon + '</span>';
+        html += '    <div style="flex: 1;">';
+        html += '      <div style="font-size: 13px; color: #202124; margin-bottom: 4px;">' + escapeHtml(notification.Message) + '</div>';
+        html += '      <div style="font-size: 11px; color: #5f6368;">' + timeAgo + '</div>';
+        html += '    </div>';
+        html += '  </div>';
+        html += '</div>';
+      });
+
+      listContainer.innerHTML = html;
+      updateNotificationBadge(notifications.length);
+    }
+
+    /**
+     * Handle notification click
+     */
+    function handleNotificationClick(notificationId, postId) {
+      // Mark as read
+      google.script.run
+        .withSuccessHandler(function() {
+          // Navigate to post if postId exists
+          if (postId) {
+            toggleNotifications(); // Close dropdown
+            openPostDetail(postId);
+          }
+          // Refresh notification list
+          loadNotifications();
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error marking notification read:', error);
+        })
+        .markNotificationRead(notificationId);
+    }
+
+    /**
+     * Mark all notifications as read
+     */
+    function markAllNotificationsRead() {
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            loadNotifications(); // Refresh list
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error marking all notifications read:', error);
+        })
+        .markAllNotificationsRead('<?= userEmail ?>');
+    }
+
+    /**
+     * Update notification badge count
+     */
+    function updateNotificationBadge(count) {
+      const badge = document.getElementById('notification-count');
+      badge.textContent = count;
+      badge.style.display = count > 0 ? 'inline-block' : 'none';
+    }
+
+    /**
+     * Get icon for notification type
+     */
+    function getNotificationIcon(type) {
+      const icons = {
+        'approval_request': '📋',
+        'approval_decision': '✅',
+        'comment_added': '💬',
+        'status_change': '🔄',
+        'mention': '@'
+      };
+      return icons[type] || '🔔';
+    }
+
+    /**
+     * Get human-readable time ago string
+     */
+    function getTimeAgo(dateString) {
+      const date = new Date(dateString);
+      const now = new Date();
+      const seconds = Math.floor((now - date) / 1000);
+
+      if (seconds < 60) return 'Just now';
+      if (seconds < 3600) return Math.floor(seconds / 60) + ' minutes ago';
+      if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
+      if (seconds < 604800) return Math.floor(seconds / 86400) + ' days ago';
+      return date.toLocaleDateString();
+    }
+
+    /**
+     * Auto-refresh notification count every 60 seconds
+     */
+    setInterval(function() {
+      google.script.run
+        .withSuccessHandler(function(count) {
+          updateNotificationBadge(count);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error getting notification count:', error);
+        })
+        .getUnreadNotificationCount('<?= userEmail ?>');
+    }, 60000);
+
+    /**
+     * Load initial notification count on page load
+     */
+    window.addEventListener('DOMContentLoaded', function() {
+      google.script.run
+        .withSuccessHandler(function(count) {
+          updateNotificationBadge(count);
+        })
+        .withFailureHandler(function(error) {
+          console.error('Error loading initial notification count:', error);
+        })
+        .getUnreadNotificationCount('<?= userEmail ?>');
+    });
+
+    /**
+     * Close notification dropdown when clicking outside
+     */
+    document.addEventListener('click', function(event) {
+      const dropdown = document.getElementById('notificationDropdown');
+      const bell = document.getElementById('notificationBell');
+
+      if (dropdown && bell && dropdown.style.display === 'block') {
+        if (!bell.contains(event.target) && !dropdown.contains(event.target)) {
+          dropdown.style.display = 'none';
+        }
+      }
+    });
+
     </script>
   </body>
 </html>

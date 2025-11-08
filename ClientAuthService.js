@@ -23,9 +23,10 @@ function generateAccessToken() {
  * @param {string} accessLevel - 'Full' or 'Read_Only'
  * @returns {Object} - {success: true, token: '...', url: '...'} or error
  */
-function grantClientAccess(clientId, email, accessLevel) {
+function grantClientAccess(clientId, email, accessLevel, postIds) {
   try {
     Logger.log('Granting client access for: ' + email + ', Client: ' + clientId);
+    Logger.log('Post IDs: ' + (postIds || 'ALL'));
 
     // Validate inputs
     if (!clientId || !email) {
@@ -33,6 +34,7 @@ function grantClientAccess(clientId, email, accessLevel) {
     }
 
     accessLevel = accessLevel || 'Full';
+    // postIds is optional - if not provided, grants access to all client posts
 
     // Check if client exists
     var client = getClientById(clientId);
@@ -96,7 +98,18 @@ function grantClientAccess(clientId, email, accessLevel) {
           rowData.push('');
           break;
         case 'Token_Expires':
-          rowData.push('');
+          // Set token to expire in 90 days
+          var expirationDate = new Date();
+          expirationDate.setDate(expirationDate.getDate() + 90);
+          rowData.push(expirationDate);
+          break;
+        case 'Post_IDs':
+          // Store comma-separated post IDs, or empty for all posts
+          rowData.push(postIds || '');
+          break;
+        case 'Access_URL':
+          // Store full access URL for easy reference
+          rowData.push(getClientAccessUrl(token));
           break;
         default:
           rowData.push('');
@@ -122,13 +135,88 @@ function grantClientAccess(clientId, email, accessLevel) {
 }
 
 /**
+ * Add a specific post to a client's authorized Post_IDs
+ * Used when submitting a post for client review
+ * @param {string} clientId - Client ID
+ * @param {string} email - Client email address
+ * @param {string} postId - Post ID to add
+ */
+function addPostToClientAccess(clientId, email, postId) {
+  try {
+    Logger.log('Adding post ' + postId + ' to access for: ' + email);
+
+    // Get existing authorized client record
+    var authSheet = _getSheet_('Authorized_Clients');
+    var data = authSheet.getDataRange().getValues();
+    var headers = data[0];
+
+    var clientIdCol = headers.indexOf('Client_ID');
+    var emailCol = headers.indexOf('Email');
+    var postIdsCol = headers.indexOf('Post_IDs');
+    var statusCol = headers.indexOf('Status');
+
+    // Find the authorized client record
+    var foundRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][clientIdCol] === clientId &&
+          data[i][emailCol] === email &&
+          data[i][statusCol] === 'Active') {
+        foundRow = i;
+        break;
+      }
+    }
+
+    if (foundRow === -1) {
+      // No existing access - grant full access for this client with this specific post
+      Logger.log('No existing access found - creating new access record');
+      grantClientAccess(clientId, email, 'Full', postId);
+      return;
+    }
+
+    // Get current Post_IDs
+    var currentPostIds = data[foundRow][postIdsCol];
+    Logger.log('Current Post_IDs: ' + currentPostIds);
+
+    // If empty, this client has full access to all posts - don't change it
+    if (!currentPostIds || currentPostIds.trim() === '') {
+      Logger.log('Client has full access (empty Post_IDs) - no change needed');
+      return;
+    }
+
+    // Parse existing post IDs
+    var postIdArray = currentPostIds.split(',').map(function(id) {
+      return id.trim();
+    });
+
+    // Check if post ID already exists
+    if (postIdArray.indexOf(postId) > -1) {
+      Logger.log('Post ID already in list - no change needed');
+      return;
+    }
+
+    // Add new post ID
+    postIdArray.push(postId);
+    var updatedPostIds = postIdArray.join(', ');
+
+    // Update the sheet
+    authSheet.getRange(foundRow + 1, postIdsCol + 1).setValue(updatedPostIds);
+    Logger.log('✅ Updated Post_IDs to: ' + updatedPostIds);
+
+  } catch (e) {
+    Logger.log('Error adding post to client access: ' + e.message);
+    Logger.log(e.stack);
+    // Don't throw - we don't want this to break the approval flow
+  }
+}
+
+/**
  * Get client access URL with token
  * @param {string} token - Access token
  * @returns {string} - Full URL to client portal
  */
 function getClientAccessUrl(token) {
   // Use the production deployment URL (not dev URL)
-  var scriptUrl = 'https://script.google.com/macros/s/AKfycbzhrrk3U7b_AIW5JjOwe1i96Q9cqkfZZCcUd0qs5VeaB69So-w8kyE4BfdMLnQxuyG2/exec';
+  var scriptUrl = 'https://script.google.com/macros/s/AKfycbwiRbuwQTrj--xfmP7klfZ_TJratdAySuujz3oSZ3-31SgTY0KA5Zsz75BDLBU-sCCV/exec';
   return scriptUrl + '?page=client&token=' + token;
 }
 
@@ -279,7 +367,7 @@ function getAuthorizedClientsForClient(clientId) {
  * @param {string} clientId - Client ID
  * @returns {Array} - Array of posts visible to this client
  */
-function getClientPosts(clientId) {
+function getClientPosts(clientId, authorizedClient) {
   try {
     Logger.log('Getting posts for client: ' + clientId);
 
@@ -303,6 +391,20 @@ function getClientPosts(clientId) {
         return p;
       }
     });
+
+    // Filter by Post_IDs if authorizedClient has specific post restrictions
+    if (authorizedClient && authorizedClient.Post_IDs && authorizedClient.Post_IDs.trim() !== '') {
+      var allowedPostIds = authorizedClient.Post_IDs.split(',').map(function(id) {
+        return id.trim();
+      });
+      Logger.log('Filtering to specific posts: ' + allowedPostIds.join(', '));
+
+      posts = posts.filter(function(post) {
+        return allowedPostIds.indexOf(post.ID) > -1;
+      });
+
+      Logger.log('After filtering: ' + posts.length + ' posts');
+    }
 
     Logger.log('Found ' + posts.length + ' posts for client: ' + clientId);
     return posts;
@@ -337,36 +439,45 @@ function getClientPostsWithImages(clientId) {
 
     if (postIdIndex === -1 || mediaUrlIndex === -1) return posts;
 
-    // Create a map of Post_ID to first image
-    var imageMap = {};
+    // Create a map of Post_ID to array of platforms
+    var platformsMap = {};
+    var platformIndex = headers.indexOf('Platform');
 
     for (var i = 1; i < platformData.length; i++) {
       var postId = platformData[i][postIdIndex];
 
-      // Skip if already have an image for this post
-      if (imageMap[postId]) continue;
+      // Initialize array for this post if needed
+      if (!platformsMap[postId]) {
+        platformsMap[postId] = [];
+      }
 
       var mediaUrl = platformFormulas[i][mediaUrlIndex] || platformData[i][mediaUrlIndex];
       var mediaType = platformData[i][mediaTypeIndex] || '';
+      var platform = platformData[i][platformIndex] || '';
 
       if (mediaUrl) {
         var extractedUrl = extractUrlFromImageFormula(mediaUrl);
         if (extractedUrl) {
-          imageMap[postId] = {
+          platformsMap[postId].push({
+            platform: platform,
             url: extractedUrl,
+            mediaType: mediaType,
             isCarousel: String(mediaType).toLowerCase().indexOf('carousel') > -1
-          };
+          });
         }
       }
     }
 
-    // Attach images to posts
+    // Attach platform images to posts
     for (var j = 0; j < posts.length; j++) {
       var postId = posts[j].ID;
-      if (imageMap[postId]) {
-        posts[j].image_url = imageMap[postId].url;
-        posts[j].is_carousel = imageMap[postId].isCarousel;
+      if (platformsMap[postId] && platformsMap[postId].length > 0) {
+        posts[j].platforms = platformsMap[postId];
+        // Keep first image as image_url for backward compatibility
+        posts[j].image_url = platformsMap[postId][0].url;
+        posts[j].is_carousel = platformsMap[postId][0].isCarousel;
       } else {
+        posts[j].platforms = [];
         posts[j].image_url = '';
         posts[j].is_carousel = false;
       }
