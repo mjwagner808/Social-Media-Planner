@@ -37,6 +37,8 @@ function savePostAsTemplate(postId, templateName) {
       sheet.appendRow([
         'ID',
         'Template_Name',
+        'Client_ID',
+        'Subsidiary_IDs',
         'Post_Title',
         'Post_Copy',
         'Platforms',
@@ -45,6 +47,8 @@ function savePostAsTemplate(postId, templateName) {
         'Hashtags',
         'Link_URL',
         'Internal_Notes',
+        'Internal_Approvers',
+        'Client_Approvers',
         'Created_By',
         'Created_Date',
         'Status'
@@ -75,6 +79,8 @@ function savePostAsTemplate(postId, templateName) {
     sheet.appendRow([
       templateId,
       templateName,
+      postData.Client_ID || '',
+      postData.Subsidiary_IDs || '',
       postData.Post_Title || '',
       postData.Post_Copy || '',
       platforms.join(', '),
@@ -83,6 +89,8 @@ function savePostAsTemplate(postId, templateName) {
       postData.Hashtags || '',
       postData.Link_URL || '',
       postData.Internal_Notes || '',
+      postData.Internal_Approvers || '',
+      postData.Client_Approvers || '',
       currentUser,
       timestamp,
       'Active'

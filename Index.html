@@ -1654,10 +1654,15 @@
         }
 
         console.log('Loading template:', template);
+        console.log('Template Post_Title:', template.Post_Title);
+        console.log('Template Post_Copy:', template.Post_Copy);
 
         // Check if form elements exist - they might not be ready yet
         const postTitle = document.getElementById('postTitle');
         const postCopy = document.getElementById('postCopy');
+
+        console.log('postTitle element:', postTitle);
+        console.log('postCopy element:', postCopy);
 
         if (!postTitle || !postCopy) {
           console.error('Form elements not ready yet');
@@ -1666,15 +1671,75 @@
           return;
         }
 
+        // Populate client and trigger subsidiary/approver loading
+        if (template.Client_ID) {
+          const clientSelect = document.getElementById('postClient');
+          clientSelect.value = template.Client_ID;
+          // Trigger the change event to load subsidiaries and client approvers
+          loadSubsidiaries();
+        }
+
         // Populate basic fields
+        console.log('Setting postTitle to:', template.Post_Title);
         postTitle.value = template.Post_Title || '';
+        console.log('postTitle.value is now:', postTitle.value);
+
+        console.log('Setting postCopy to:', template.Post_Copy);
         postCopy.value = template.Post_Copy || '';
+        console.log('postCopy.value is now:', postCopy.value);
         document.getElementById('postHashtags').value = template.Hashtags || '';
         document.getElementById('linkUrl').value = template.Link_URL || '';
         document.getElementById('postNotes').value = template.Internal_Notes || '';
 
         // Update character count
         updateCharCount();
+
+        // Wait for subsidiaries to load, then select them
+        if (template.Subsidiary_IDs) {
+          setTimeout(function() {
+            const subsidiaryIds = template.Subsidiary_IDs.split(',').map(id => id.trim());
+            const subsidiaryCheckboxes = document.querySelectorAll('input[name="subsidiaryIds"]');
+            subsidiaryCheckboxes.forEach(checkbox => {
+              if (subsidiaryIds.includes(checkbox.value)) {
+                checkbox.checked = true;
+              }
+            });
+          }, 600);
+        }
+
+        // Handle internal approvers
+        if (template.Internal_Approvers) {
+          const approverSelect = document.getElementById('internalApprovers');
+          const approverEmails = template.Internal_Approvers.split(',').map(email => email.trim());
+
+          Array.from(approverSelect.options).forEach(option => {
+            if (approverEmails.includes(option.value)) {
+              option.selected = true;
+            }
+          });
+        }
+
+        // Handle client approvers - wait for checkboxes to load
+        if (template.Client_Approvers) {
+          setTimeout(function() {
+            const approverEmails = template.Client_Approvers.split(',').map(email => email.trim());
+            const clientApproverCheckboxes = document.querySelectorAll('input[name="clientApproverCheckbox"]');
+            const matchedEmails = [];
+
+            clientApproverCheckboxes.forEach(checkbox => {
+              if (approverEmails.includes(checkbox.value)) {
+                checkbox.checked = true;
+                matchedEmails.push(checkbox.value);
+              }
+            });
+
+            // Put unmatched emails in custom field
+            const unmatchedEmails = approverEmails.filter(email => !matchedEmails.includes(email));
+            if (unmatchedEmails.length > 0) {
+              document.getElementById('customClientApprovers').value = unmatchedEmails.join(', ');
+            }
+          }, 600);
+        }
 
         // Handle platforms - parse comma-separated list
         if (template.Platforms) {
