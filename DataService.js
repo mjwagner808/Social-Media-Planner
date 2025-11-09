@@ -172,19 +172,19 @@ function _getPostByIdSimple(postId) {
 function getClientById(clientId) {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Clients');
   var data = sheet.getDataRange().getValues();
-  
+
   if (data.length <= 1) return null;
-  
+
   var headers = data[0];
   // Clients sheet uses 'ID' column
   var clientIdIndex = headers.indexOf('ID');
-  
+
   if (clientIdIndex === -1) {
     // Try 'Client_ID' as fallback
     clientIdIndex = headers.indexOf('Client_ID');
     if (clientIdIndex === -1) return null;
   }
-  
+
   for (var i = 1; i < data.length; i++) {
     if (data[i][clientIdIndex] === clientId) {
       var client = {};
@@ -194,8 +194,37 @@ function getClientById(clientId) {
       return client;
     }
   }
-  
+
   return null;
+}
+
+/**
+ * Get authorized client approvers for a specific client
+ * Returns array of email addresses from Authorized_Clients sheet
+ */
+function getClientApprovers(clientId) {
+  try {
+    if (!clientId) return [];
+
+    var authorizedClients = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.Client_ID === clientId && ac.Status === 'Active';
+      }
+    });
+
+    // Extract unique email addresses
+    var emails = [];
+    authorizedClients.forEach(function(ac) {
+      if (ac.Email && emails.indexOf(ac.Email) === -1) {
+        emails.push(ac.Email);
+      }
+    });
+
+    return emails;
+  } catch (e) {
+    Logger.log('Error getting client approvers: ' + e.message);
+    return [];
+  }
 }
 
 /**
@@ -1304,5 +1333,119 @@ function createPostPlatforms(postId, platforms) {
 
   } catch (e) {
     return _err_(e, 'createPostPlatforms');
+  }
+}
+
+/**
+ * Delete a post and all related data
+ * @param {string} postId - The post ID to delete
+ * @returns {Object} - Success or error
+ */
+function deletePost(postId) {
+  try {
+    Logger.log('Deleting post: ' + postId);
+
+    if (!postId) {
+      return {success: false, error: 'Post ID is required'};
+    }
+
+    // 1. Delete from Posts sheet
+    var postsSheet = _getSheet_('Posts');
+    var postsData = postsSheet.getDataRange().getValues();
+    var headers = postsData[0];
+    var idIndex = headers.indexOf('ID');
+
+    var postRowIndex = -1;
+    for (var i = 1; i < postsData.length; i++) {
+      if (postsData[i][idIndex] === postId) {
+        postRowIndex = i + 1; // +1 for 1-based index
+        break;
+      }
+    }
+
+    if (postRowIndex === -1) {
+      return {success: false, error: 'Post not found'};
+    }
+
+    postsSheet.deleteRow(postRowIndex);
+    Logger.log('✅ Deleted from Posts sheet');
+
+    // 2. Delete from Post_Platforms
+    try {
+      deletePostPlatforms(postId);
+      Logger.log('✅ Deleted from Post_Platforms');
+    } catch (e) {
+      Logger.log('⚠️ Error deleting platforms (non-critical): ' + e.message);
+    }
+
+    // 3. Delete from Post_Approvals
+    try {
+      var approvalsSheet = _getSheet_('Post_Approvals');
+      if (approvalsSheet) {
+        var approvalsData = approvalsSheet.getDataRange().getValues();
+        var approvalsHeaders = approvalsData[0];
+        var postIdIndex = approvalsHeaders.indexOf('Post_ID');
+
+        // Delete from bottom to top to avoid index shifting
+        for (var j = approvalsData.length - 1; j >= 1; j--) {
+          if (approvalsData[j][postIdIndex] === postId) {
+            approvalsSheet.deleteRow(j + 1);
+          }
+        }
+        Logger.log('✅ Deleted from Post_Approvals');
+      }
+    } catch (e) {
+      Logger.log('⚠️ Error deleting approvals (non-critical): ' + e.message);
+    }
+
+    // 4. Delete comments for this post
+    try {
+      var commentsSheet = _getSheet_('Comments');
+      if (commentsSheet) {
+        var commentsData = commentsSheet.getDataRange().getValues();
+        var commentsHeaders = commentsData[0];
+        var commentPostIdIndex = commentsHeaders.indexOf('Post_ID');
+
+        // Delete from bottom to top
+        for (var k = commentsData.length - 1; k >= 1; k--) {
+          if (commentsData[k][commentPostIdIndex] === postId) {
+            commentsSheet.deleteRow(k + 1);
+          }
+        }
+        Logger.log('✅ Deleted from Comments');
+      }
+    } catch (e) {
+      Logger.log('⚠️ Error deleting comments (non-critical): ' + e.message);
+    }
+
+    // 5. Delete notifications for this post
+    try {
+      var notificationsSheet = _getSheet_('Notifications');
+      if (notificationsSheet) {
+        var notifData = notificationsSheet.getDataRange().getValues();
+        var notifHeaders = notifData[0];
+        var notifPostIdIndex = notifHeaders.indexOf('Related_Post_ID');
+
+        // Delete from bottom to top
+        for (var m = notifData.length - 1; m >= 1; m--) {
+          if (notifData[m][notifPostIdIndex] === postId) {
+            notificationsSheet.deleteRow(m + 1);
+          }
+        }
+        Logger.log('✅ Deleted from Notifications');
+      }
+    } catch (e) {
+      Logger.log('⚠️ Error deleting notifications (non-critical): ' + e.message);
+    }
+
+    Logger.log('✅ Post deleted successfully: ' + postId);
+    return {
+      success: true,
+      message: 'Post deleted successfully'
+    };
+
+  } catch (e) {
+    Logger.log('❌ Error deleting post: ' + e.message);
+    return _err_(e, 'deletePost');
   }
 }

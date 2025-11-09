@@ -1153,9 +1153,12 @@
                 </div>
 
                 <div class="form-group">
-                  <label for="clientApprovers">Client Approvers (Email)</label>
-                  <textarea id="clientApprovers" name="clientApprovers" rows="4" placeholder="email1@client.com, email2@client.com"></textarea>
-                  <small class="form-help">Comma-separated emails</small>
+                  <label for="clientApprovers">Client Approvers</label>
+                  <div id="clientApproversContainer" class="checkbox-group">
+                    <span class="form-help">Select a client first</span>
+                  </div>
+                  <small class="form-help">Select reviewers from authorized client contacts, or add custom emails below</small>
+                  <textarea id="customClientApprovers" name="customClientApprovers" rows="2" placeholder="Additional emails: email1@client.com, email2@client.com" style="margin-top: 8px;"></textarea>
                 </div>
               </div>
             </div>
@@ -1652,9 +1655,20 @@
 
         console.log('Loading template:', template);
 
+        // Check if form elements exist - they might not be ready yet
+        const postTitle = document.getElementById('postTitle');
+        const postCopy = document.getElementById('postCopy');
+
+        if (!postTitle || !postCopy) {
+          console.error('Form elements not ready yet');
+          // Retry after a short delay
+          setTimeout(function() { loadTemplate(); }, 200);
+          return;
+        }
+
         // Populate basic fields
-        document.getElementById('postTitle').value = template.Post_Title || '';
-        document.getElementById('postCopy').value = template.Post_Copy || '';
+        postTitle.value = template.Post_Title || '';
+        postCopy.value = template.Post_Copy || '';
         document.getElementById('postHashtags').value = template.Hashtags || '';
         document.getElementById('linkUrl').value = template.Link_URL || '';
         document.getElementById('postNotes').value = template.Internal_Notes || '';
@@ -1856,6 +1870,32 @@
             alert('❌ Error: ' + error.message);
           })
           .deleteTemplate(templateId);
+      }
+
+      // Delete Post Functions
+      function confirmDeletePost(postId, postTitle) {
+        if (confirm('⚠️ Are you sure you want to delete "' + postTitle + '"?\n\nThis will permanently delete:\n• The post\n• All platform entries\n• All approvals\n• All comments\n• All notifications\n\nThis action CANNOT be undone!')) {
+          deletePostById(postId);
+        }
+      }
+
+      function deletePostById(postId) {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Post deleted successfully');
+              // Close the detail modal
+              closePostDetail();
+              // Reload the calendar to remove the deleted post
+              loadCalendarData();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to delete post'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .deletePost(postId);
       }
 
       function displayPostDetail(post) {
@@ -2161,6 +2201,7 @@
         // Always show Edit Post and Save as Template buttons (on the left)
         html += '<button class="btn btn-primary" type="button" onclick="editCurrentPost()">Edit Post</button>';
         html += ' <button class="btn btn-secondary" type="button" onclick="saveAsTemplate(\'' + post.ID + '\')">📋 Save as Template</button>';
+        html += ' <button class="btn btn-secondary" type="button" onclick="confirmDeletePost(\'' + post.ID + '\', \'' + escapeHtml(post.Post_Title || 'this post').replace(/'/g, "\\'") + '\')" style="color: #ea4335;">🗑️ Delete Post</button>';
 
         // Add status change buttons based on current status (in the middle)
         if (post.Status === 'Draft') {
@@ -2461,10 +2502,29 @@
           });
         }
 
-        // Populate client approvers (textarea field)
+        // Populate client approvers (checkboxes and custom field)
         if (post.Client_Approvers) {
           console.log('Setting client approvers to:', post.Client_Approvers);
-          document.getElementById('clientApprovers').value = post.Client_Approvers;
+          const approversList = post.Client_Approvers.split(',').map(email => email.trim());
+
+          // Wait for client approver checkboxes to load, then check the matching ones
+          setTimeout(function() {
+            const clientApproverCheckboxes = document.querySelectorAll('input[name="clientApproverCheckbox"]');
+            const matchedEmails = [];
+
+            clientApproverCheckboxes.forEach(checkbox => {
+              if (approversList.includes(checkbox.value)) {
+                checkbox.checked = true;
+                matchedEmails.push(checkbox.value);
+              }
+            });
+
+            // Put unmatched emails in custom field
+            const unmatchedEmails = approversList.filter(email => !matchedEmails.includes(email));
+            if (unmatchedEmails.length > 0) {
+              document.getElementById('customClientApprovers').value = unmatchedEmails.join(', ');
+            }
+          }, 500); // Give time for approvers to load
         }
 
         // Load platforms
@@ -2817,18 +2877,48 @@
       function loadSubsidiaries() {
         const clientId = document.getElementById('postClient').value;
         const subsidiariesContainer = document.getElementById('subsidiariesContainer');
+        const clientApproversContainer = document.getElementById('clientApproversContainer');
 
         if (!clientId) {
           subsidiariesContainer.innerHTML = '<span class="form-help">Select a client first</span>';
+          clientApproversContainer.innerHTML = '<span class="form-help">Select a client first</span>';
           return;
         }
 
+        // Load subsidiaries
         google.script.run
           .withSuccessHandler(populateSubsidiaries)
           .withFailureHandler(function(error) {
             subsidiariesContainer.innerHTML = '<span class="form-help" style="color: #ea4335;">Error loading subsidiaries</span>';
           })
           .getClientSubsidiaries(clientId);
+
+        // Load client approvers
+        google.script.run
+          .withSuccessHandler(populateClientApprovers)
+          .withFailureHandler(function(error) {
+            clientApproversContainer.innerHTML = '<span class="form-help" style="color: #ea4335;">Error loading approvers</span>';
+          })
+          .getClientApprovers(clientId);
+      }
+
+      function populateClientApprovers(approverEmails) {
+        const clientApproversContainer = document.getElementById('clientApproversContainer');
+
+        if (!approverEmails || approverEmails.length === 0) {
+          clientApproversContainer.innerHTML = '<span class="form-help">No authorized contacts for this client yet. Add custom emails below.</span>';
+          return;
+        }
+
+        clientApproversContainer.innerHTML = '';
+        approverEmails.forEach(email => {
+          const label = document.createElement('label');
+          label.className = 'checkbox-item';
+          label.innerHTML =
+            '<input type="checkbox" name="clientApproverCheckbox" value="' + email + '">' +
+            '<span>' + email + '</span>';
+          clientApproversContainer.appendChild(label);
+        });
       }
 
       function addPlatformMedia(platformName, mediaUrl, mediaType) {
@@ -2978,9 +3068,17 @@
         const approverSelect = document.getElementById('internalApprovers');
         formData.internalApprovers = Array.from(approverSelect.selectedOptions).map(opt => opt.value).join(', ');
 
-        // Collect client approvers
-        const clientApprovers = document.getElementById('clientApprovers').value.trim();
-        formData.clientApprovers = clientApprovers;
+        // Collect client approvers from checkboxes
+        const clientApproverCheckboxes = document.querySelectorAll('input[name="clientApproverCheckbox"]:checked');
+        const checkedApprovers = Array.from(clientApproverCheckboxes).map(cb => cb.value);
+
+        // Collect custom client approvers from textarea
+        const customApprovers = document.getElementById('customClientApprovers').value.trim();
+        const customApproversList = customApprovers ? customApprovers.split(',').map(email => email.trim()).filter(email => email) : [];
+
+        // Combine and deduplicate
+        const allClientApprovers = [...new Set([...checkedApprovers, ...customApproversList])];
+        formData.clientApprovers = allClientApprovers.join(', ');
 
         // Collect platform data
         formData.platforms = selectedPlatforms.map(platformName => {
@@ -3082,6 +3180,7 @@
       function resetForm() {
         document.getElementById('postCreationForm').reset();
         document.getElementById('subsidiariesContainer').innerHTML = '<span class="form-help">Select a client first</span>';
+        document.getElementById('clientApproversContainer').innerHTML = '<span class="form-help">Select a client first</span>';
         document.getElementById('platformMediaContainer').innerHTML = '';
         selectedPlatforms = [];
         document.getElementById('copyCharCount').textContent = '0';
@@ -3090,6 +3189,12 @@
         const templateSelector = document.getElementById('templateSelector');
         if (templateSelector) {
           templateSelector.value = '';
+        }
+
+        // Reset custom client approvers
+        const customApprovers = document.getElementById('customClientApprovers');
+        if (customApprovers) {
+          customApprovers.value = '';
         }
 
         hideFormMessages();
