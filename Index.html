@@ -909,6 +909,9 @@
           <button class="btn btn-primary" onclick="openPostCreationForm()">
             ➕ Create Post
           </button>
+          <button class="btn btn-secondary" onclick="openTemplateManager()">
+            📋 Templates
+          </button>
           <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
             📊 Strategy
           </button>
@@ -1005,6 +1008,18 @@
         <div class="modal-body">
           <div class="error-message" id="formError"></div>
           <div class="success-message" id="formSuccess"></div>
+
+          <!-- Template Selector -->
+          <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 24px; border: 1px solid #dadce0;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <label for="templateSelector" style="font-weight: 500; margin: 0;">📋 Start from Template (Optional)</label>
+              <button type="button" class="btn btn-secondary" onclick="refreshTemplates()" style="padding: 6px 12px; font-size: 13px;">🔄 Refresh</button>
+            </div>
+            <select id="templateSelector" onchange="loadTemplate()" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">
+              <option value="">-- Select a template --</option>
+            </select>
+            <small style="display: block; margin-top: 8px; color: #5f6368;">Templates pre-fill the form with saved post data. You can still edit all fields.</small>
+          </div>
 
           <form id="postCreationForm">
             <!-- Basic Information Section -->
@@ -1179,6 +1194,32 @@
       </div>
     </div>
 
+    <!-- Template Manager Modal -->
+    <div class="modal-overlay" id="templateManagerModal">
+      <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-header">
+          <h2>📋 Manage Post Templates</h2>
+          <button class="modal-close" onclick="closeTemplateManager()">&times;</button>
+        </div>
+
+        <div class="modal-body" id="templateManagerBody">
+          <div style="margin-bottom: 20px; color: #5f6368;">
+            <p style="margin: 0;">Templates let you save post configurations for faster content creation. Save commonly used post structures, categories, platforms, and copy.</p>
+          </div>
+
+          <div id="templatesList">
+            <div style="text-align: center; padding: 40px; color: #9aa0a6;">
+              <p>Loading templates...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" onclick="closeTemplateManager()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       // Server-side values (force-print with JavaScript string escaping)
       const userName = "<?!= userName.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
@@ -1192,6 +1233,7 @@
       let filteredPosts = [];
       let currentStatusFilter = 'all';
       let currentPostId = null; // Track which post is currently being viewed in detail modal
+      let allTemplates = []; // Store post templates
 
       // Initialize on load
       window.onload = function() {
@@ -1533,6 +1575,289 @@
         editPost(postIdToEdit);
       }
 
+      // Save current post as template
+      function saveAsTemplate(postId) {
+        const templateName = prompt('Enter a name for this template:\n\n(e.g., "Weekly Tip", "Product Spotlight", "Holiday Post")');
+
+        if (!templateName) {
+          return; // User cancelled
+        }
+
+        if (templateName.trim().length === 0) {
+          alert('Template name cannot be empty');
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Template saved successfully!\n\nYou can now use "' + templateName + '" when creating new posts.');
+              // Refresh templates list
+              refreshTemplates();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to save template'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .savePostAsTemplate(postId, templateName.trim());
+      }
+
+      // Refresh templates list from backend
+      function refreshTemplates() {
+        google.script.run
+          .withSuccessHandler(function(templates) {
+            console.log('Templates loaded:', templates);
+            allTemplates = Array.isArray(templates) ? templates : [];
+            populateTemplateSelector();
+          })
+          .withFailureHandler(function(error) {
+            console.error('Error loading templates:', error.message);
+          })
+          .getAllTemplates();
+      }
+
+      // Populate template selector dropdown
+      function populateTemplateSelector() {
+        const selector = document.getElementById('templateSelector');
+        if (!selector) return;
+
+        selector.innerHTML = '<option value="">-- Select a template --</option>';
+
+        allTemplates.forEach(template => {
+          const option = document.createElement('option');
+          option.value = template.ID;
+          option.textContent = template.Template_Name;
+          selector.appendChild(option);
+        });
+
+        console.log('Template selector populated with ' + allTemplates.length + ' templates');
+      }
+
+      // Load selected template into form
+      function loadTemplate() {
+        const selector = document.getElementById('templateSelector');
+        const templateId = selector.value;
+
+        if (!templateId) {
+          return; // User selected "-- Select a template --"
+        }
+
+        const template = allTemplates.find(t => t.ID === templateId);
+        if (!template) {
+          console.error('Template not found:', templateId);
+          return;
+        }
+
+        console.log('Loading template:', template);
+
+        // Populate basic fields
+        document.getElementById('postTitle').value = template.Post_Title || '';
+        document.getElementById('postCopy').value = template.Post_Copy || '';
+        document.getElementById('postHashtags').value = template.Hashtags || '';
+        document.getElementById('linkUrl').value = template.Link_URL || '';
+        document.getElementById('postNotes').value = template.Internal_Notes || '';
+
+        // Update character count
+        updateCharCount();
+
+        // Handle platforms - parse comma-separated list
+        if (template.Platforms) {
+          const platforms = template.Platforms.split(',').map(p => p.trim());
+
+          // Clear existing platform selections
+          selectedPlatforms = [];
+          const platformMediaContainer = document.getElementById('platformMediaContainer');
+          if (platformMediaContainer) {
+            platformMediaContainer.innerHTML = '';
+          }
+
+          // Select platforms from template
+          const platformCheckboxes = document.querySelectorAll('#platformsContainer input[type="checkbox"]');
+          platformCheckboxes.forEach(checkbox => {
+            const shouldBeChecked = platforms.includes(checkbox.value);
+            checkbox.checked = shouldBeChecked;
+
+            if (shouldBeChecked) {
+              togglePlatformMedia(checkbox.value);
+            }
+          });
+        }
+
+        // Handle content category - select in multi-select
+        if (template.Content_Category && formOptions && formOptions.categories) {
+          const categorySelect = document.getElementById('contentCategory');
+
+          // Parse category name from template
+          const categoryName = template.Content_Category;
+
+          // Find matching category ID
+          const category = formOptions.categories.find(c => c.Category_Name === categoryName);
+          if (category) {
+            // Select the option
+            Array.from(categorySelect.options).forEach(option => {
+              if (option.value === category.ID) {
+                option.selected = true;
+              }
+            });
+          }
+        }
+
+        // Strategy goals is not in templates yet - could be added in future version
+
+        // Show success message
+        showFormSuccess('Template "' + template.Template_Name + '" loaded! You can now edit the fields as needed.');
+
+        // Auto-clear success message after 3 seconds
+        setTimeout(function() {
+          document.getElementById('formSuccess').textContent = '';
+        }, 3000);
+      }
+
+      // Template Manager Functions
+      function openTemplateManager() {
+        const modal = document.getElementById('templateManagerModal');
+        modal.classList.add('active');
+
+        // Load templates
+        loadTemplatesForManager();
+      }
+
+      function closeTemplateManager() {
+        const modal = document.getElementById('templateManagerModal');
+        modal.classList.remove('active');
+      }
+
+      function loadTemplatesForManager() {
+        const templatesList = document.getElementById('templatesList');
+        templatesList.innerHTML = '<div style="text-align: center; padding: 40px; color: #9aa0a6;"><p>Loading templates...</p></div>';
+
+        google.script.run
+          .withSuccessHandler(function(templates) {
+            allTemplates = Array.isArray(templates) ? templates : [];
+            displayTemplatesList(templates);
+          })
+          .withFailureHandler(function(error) {
+            templatesList.innerHTML = '<div style="text-align: center; padding: 40px; color: #ea4335;"><p>Error loading templates: ' + error.message + '</p></div>';
+          })
+          .getAllTemplates();
+      }
+
+      function displayTemplatesList(templates) {
+        const templatesList = document.getElementById('templatesList');
+
+        if (!templates || templates.length === 0) {
+          templatesList.innerHTML =
+            '<div style="text-align: center; padding: 40px; color: #9aa0a6;">' +
+            '<p style="font-size: 16px; margin-bottom: 12px;">No templates yet</p>' +
+            '<p style="font-size: 14px;">Create a post and use "📋 Save as Template" to get started!</p>' +
+            '</div>';
+          return;
+        }
+
+        let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
+
+        templates.forEach(function(template) {
+          html += '<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 16px; background: #fff;">';
+
+          // Template header
+          html += '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">';
+          html += '<div style="flex: 1;">';
+          html += '<h3 style="margin: 0 0 4px 0; font-size: 16px; color: #202124;">' + escapeHtml(template.Template_Name) + '</h3>';
+          html += '<div style="font-size: 13px; color: #5f6368;">';
+          html += 'Created: ' + formatDateForDisplay(template.Created_Date) + ' by ' + escapeHtml(template.Created_By);
+          html += '</div>';
+          html += '</div>';
+
+          // Action buttons
+          html += '<div style="display: flex; gap: 8px;">';
+          html += '<button class="btn btn-secondary" onclick="useTemplate(\'' + template.ID + '\')" style="padding: 6px 12px; font-size: 13px;">✏️ Use</button>';
+          html += '<button class="btn btn-secondary" onclick="confirmDeleteTemplate(\'' + template.ID + '\', \'' + escapeHtml(template.Template_Name).replace(/'/g, "\\'") + '\')" style="padding: 6px 12px; font-size: 13px; color: #ea4335;">🗑️ Delete</button>';
+          html += '</div>';
+          html += '</div>';
+
+          // Template details
+          html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">';
+
+          if (template.Post_Title) {
+            html += '<div><strong style="color: #5f6368;">Title:</strong> ' + escapeHtml(template.Post_Title) + '</div>';
+          }
+
+          if (template.Platforms) {
+            html += '<div><strong style="color: #5f6368;">Platforms:</strong> ' + escapeHtml(template.Platforms) + '</div>';
+          }
+
+          if (template.Content_Category) {
+            html += '<div><strong style="color: #5f6368;">Category:</strong> ' + escapeHtml(template.Content_Category) + '</div>';
+          }
+
+          if (template.Hashtags) {
+            html += '<div><strong style="color: #5f6368;">Hashtags:</strong> ' + escapeHtml(template.Hashtags) + '</div>';
+          }
+
+          html += '</div>';
+
+          // Post copy preview
+          if (template.Post_Copy) {
+            var copyPreview = template.Post_Copy.length > 150
+              ? template.Post_Copy.substring(0, 150) + '...'
+              : template.Post_Copy;
+            html += '<div style="margin-top: 12px; padding: 12px; background: #f8f9fa; border-radius: 4px; font-size: 14px;">';
+            html += '<strong style="color: #5f6368;">Copy:</strong><br>';
+            html += '<span style="color: #202124; white-space: pre-wrap;">' + escapeHtml(copyPreview) + '</span>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        });
+
+        html += '</div>';
+        templatesList.innerHTML = html;
+      }
+
+      function useTemplate(templateId) {
+        // Close template manager
+        closeTemplateManager();
+
+        // Open post creation form
+        openPostCreationForm();
+
+        // Select the template in the dropdown
+        setTimeout(function() {
+          const templateSelector = document.getElementById('templateSelector');
+          if (templateSelector) {
+            templateSelector.value = templateId;
+            // Trigger the change event to load the template
+            loadTemplate();
+          }
+        }, 500); // Small delay to ensure form is fully loaded
+      }
+
+      function confirmDeleteTemplate(templateId, templateName) {
+        if (confirm('Are you sure you want to delete the template "' + templateName + '"?\n\nThis action cannot be undone.')) {
+          deleteTemplateById(templateId);
+        }
+      }
+
+      function deleteTemplateById(templateId) {
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              // Reload templates list
+              loadTemplatesForManager();
+              // Also refresh the template selector in the form
+              refreshTemplates();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to delete template'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .deleteTemplate(templateId);
+      }
+
       function displayPostDetail(post) {
         console.log('Displaying post:', post);
 
@@ -1833,8 +2158,9 @@
         const footer = document.getElementById('postDetailFooter');
         let html = '';
 
-        // Always show Edit Post button (on the left)
+        // Always show Edit Post and Save as Template buttons (on the left)
         html += '<button class="btn btn-primary" type="button" onclick="editCurrentPost()">Edit Post</button>';
+        html += ' <button class="btn btn-secondary" type="button" onclick="saveAsTemplate(\'' + post.ID + '\')">📋 Save as Template</button>';
 
         // Add status change buttons based on current status (in the middle)
         if (post.Status === 'Draft') {
@@ -2376,6 +2702,11 @@
           loadFormOptions();
         }
 
+        // Load templates if not already loaded
+        if (allTemplates.length === 0) {
+          refreshTemplates();
+        }
+
         // Set up character counter
         const copyTextarea = document.getElementById('postCopy');
         copyTextarea.addEventListener('input', updateCharCount);
@@ -2754,6 +3085,13 @@
         document.getElementById('platformMediaContainer').innerHTML = '';
         selectedPlatforms = [];
         document.getElementById('copyCharCount').textContent = '0';
+
+        // Reset template selector
+        const templateSelector = document.getElementById('templateSelector');
+        if (templateSelector) {
+          templateSelector.value = '';
+        }
+
         hideFormMessages();
       }
 
