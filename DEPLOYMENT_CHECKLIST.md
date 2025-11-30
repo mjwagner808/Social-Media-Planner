@@ -1,6 +1,6 @@
 # Production Deployment Checklist
 
-**Version:** 2.0 (Sprint 1 & 2 Complete)
+**Version:** 2.1 (Sprint 1 & 2 + UX Polish Complete)
 **Date:** November 30, 2025
 **Status:** Ready for Production
 
@@ -52,8 +52,8 @@
    - Under **Version**, select **New version**
    - **Description:**
      ```
-     Sprint 1 & 2: Access control (Access_Type field), status synchronization,
-     admin-only delete, carousel detection, edit post verification
+     v2.1: Access control, status sync, admin-only delete, carousel detection,
+     loading skeletons, client-side caching, manual refresh button
      ```
    - Click **Deploy**
 
@@ -212,6 +212,24 @@
 
 ---
 
+#### Test 6: UX Improvements (Skeletons & Caching)
+
+**Loading Skeletons:**
+- [ ] Refresh calendar (F5) - Should see skeleton calendar grid with shimmer animation
+- [ ] Click any post - Should see skeleton post detail layout while loading
+- [ ] Click "Create Post" without cached form options - Should see skeleton checkboxes for platforms
+
+**Client-Side Caching:**
+- [ ] Load calendar - Note the timestamp in console
+- [ ] Navigate away and back (don't refresh) - Should load instantly from cache
+- [ ] Click "🔄 Refresh" button - Should force fresh data load
+- [ ] Create a new post - Cache should auto-invalidate and reload
+- [ ] Check console logs - Should see "Using cached calendar data" messages
+
+**⏱️ Estimated Time:** 3 minutes
+
+---
+
 ### Step 3: Smoke Test (Quick Health Check)
 
 Run through core workflows to ensure nothing broke:
@@ -228,6 +246,8 @@ Run through core workflows to ensure nothing broke:
 - [ ] **Client approval** - Success
 - [ ] **Save as template** - Success
 - [ ] **Load template** - Success
+- [ ] **Manual refresh (🔄 button)** - Success
+- [ ] **Token expiration** - Verified (existing tokens have 90-day expiry)
 
 **⏱️ Estimated Time:** 10 minutes
 
@@ -238,10 +258,12 @@ Run through core workflows to ensure nothing broke:
 ### ✅ Deployment Successful If:
 
 1. **New version deployed** without errors
-2. **All 5 tests pass** (Access Control, Status Sync, Permissions, Carousel, Edit)
+2. **All 6 tests pass** (Access Control, Status Sync, Permissions, Carousel, Edit, UX)
 3. **Smoke test passes** (all core workflows functional)
 4. **No critical errors** in Apps Script execution logs
 5. **User can perform daily tasks** without issues
+6. **Loading skeletons appear** during data loads
+7. **Caching works** (instant loads on repeat visits)
 
 ### 🚨 Rollback If:
 
@@ -415,7 +437,7 @@ Run through core workflows to ensure nothing broke:
 
 **Deployed By:** ___________________
 **Date/Time:** ___________________
-**Version:** 2.0 (Sprint 1 & 2)
+**Version:** 2.1 (Sprint 1 & 2 + UX Polish)
 **Deployment Successful:** ☐ Yes ☐ No
 **All Tests Passed:** ☐ Yes ☐ No
 **Issues Encountered:** ___________________
@@ -427,9 +449,9 @@ ___________________
 
 ---
 
-**Total Estimated Deployment Time:** 45-50 minutes
+**Total Estimated Deployment Time:** 50-55 minutes
 - Apps Script deployment: 5 minutes
-- Testing (all 5 tests): 30 minutes
+- Testing (all 6 tests): 33 minutes
 - Smoke test: 10 minutes
 - Post-deployment monitoring: Ongoing
 
