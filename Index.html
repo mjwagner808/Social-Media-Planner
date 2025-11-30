@@ -1101,8 +1101,11 @@
           <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
             📊 Strategy
           </button>
+          <button class="btn btn-secondary" onclick="refreshCalendarData()" title="Refresh calendar data">
+            🔄 Refresh
+          </button>
         </div>
-        
+
         <div class="filters">
           <span class="filter-label">Filters:</span>
           <select id="client-filter" onchange="filterCalendar()">
@@ -1642,6 +1645,14 @@
       let currentPostId = null; // Track which post is currently being viewed in detail modal
       let allTemplates = []; // Store post templates
 
+      // Cache for calendar data
+      let calendarDataCache = {
+        posts: null,
+        clients: null,
+        timestamp: null,
+        cacheDuration: 5 * 60 * 1000 // 5 minutes in milliseconds
+      };
+
       // Initialize on load
       window.onload = function() {
         // Check if google.script.run is available (only in deployed Apps Script environment)
@@ -1649,7 +1660,7 @@
           showPreviewMessage();
           return;
         }
-        
+
         loadCalendarData();
         loadApprovalCount();
       };
@@ -1664,8 +1675,29 @@
           '</div>';
       }
 
-      // Load calendar data
-      function loadCalendarData() {
+      // Load calendar data with optional cache bypass
+      function loadCalendarData(forceRefresh = false) {
+        // Check if we have valid cached data
+        const now = Date.now();
+        const cacheIsValid = calendarDataCache.timestamp &&
+                             (now - calendarDataCache.timestamp) < calendarDataCache.cacheDuration;
+
+        if (!forceRefresh && cacheIsValid && calendarDataCache.posts && calendarDataCache.clients) {
+          console.log('Using cached calendar data');
+          allPosts = calendarDataCache.posts;
+          filteredPosts = allPosts;
+          allClients = calendarDataCache.clients;
+          populateClientFilter(allClients);
+          renderCalendar();
+
+          document.getElementById('loading').classList.remove('active');
+          document.getElementById('calendar-container').style.display = 'block';
+          setupImagePreview();
+          loadApprovalCount();
+          return;
+        }
+
+        console.log(forceRefresh ? 'Force refreshing calendar data' : 'Loading fresh calendar data');
         document.getElementById('loading').classList.add('active');
         document.getElementById('calendar-container').style.display = 'none';
 
@@ -1687,6 +1719,9 @@
             filteredPosts = allPosts;
             console.log('allPosts set to:', allPosts.length, 'posts');
 
+            // Cache the posts
+            calendarDataCache.posts = allPosts;
+
             // Load clients
             google.script.run
               .withSuccessHandler(function(clients) {
@@ -1694,6 +1729,10 @@
                 allClients = Array.isArray(clients) ? clients : [];
                 populateClientFilter(allClients);
                 renderCalendar();
+
+                // Update cache
+                calendarDataCache.clients = allClients;
+                calendarDataCache.timestamp = Date.now();
 
                 document.getElementById('loading').classList.remove('active');
                 document.getElementById('calendar-container').style.display = 'block';
@@ -1709,6 +1748,18 @@
           })
           .withFailureHandler(handleError)
           .getAllPostsWithImages();
+      }
+
+      // Force refresh calendar data (bypass cache)
+      function refreshCalendarData() {
+        loadCalendarData(true);
+      }
+
+      // Invalidate cache when data changes
+      function invalidateCalendarCache() {
+        calendarDataCache.posts = null;
+        calendarDataCache.clients = null;
+        calendarDataCache.timestamp = null;
       }
 
       // Load approval count
@@ -2355,7 +2406,8 @@
               alert('✅ Post deleted successfully');
               // Close the detail modal
               closePostDetail();
-              // Reload the calendar to remove the deleted post
+              // Invalidate cache and reload calendar to remove the deleted post
+              invalidateCalendarCache();
               loadCalendarData();
             } else {
               alert('❌ Error: ' + (result.error || 'Failed to delete post'));
@@ -3361,7 +3413,8 @@
             if (result.success) {
               // Refresh the post detail view
               openPostDetail(postId);
-              // Refresh the calendar
+              // Invalidate cache and refresh the calendar
+              invalidateCalendarCache();
               loadCalendarData();
             } else {
               alert('Error: ' + (result.error || 'Failed to update status'));
@@ -3780,7 +3833,8 @@
         const modal = document.getElementById('approvalDashboardModal');
         if (modal) {
           modal.remove();
-          // Refresh calendar to show any status changes from approvals
+          // Invalidate cache and refresh calendar to show any status changes from approvals
+          invalidateCalendarCache();
           loadCalendarData();
         }
       }
@@ -4319,8 +4373,9 @@
             setTimeout(() => {
               closePostCreationForm();
 
-              // Force a full calendar reload
+              // Force a full calendar reload (invalidate cache first)
               console.log('Calling loadCalendarData()...');
+              invalidateCalendarCache();
               loadCalendarData();
             }, 1500);
           } else {
@@ -4600,7 +4655,8 @@
               alert('✅ Post submitted for internal review!' + emailMsg);
               // Refresh post detail
               openPostDetail(postId);
-              // Refresh calendar
+              // Invalidate cache and refresh calendar
+              invalidateCalendarCache();
               loadCalendarData();
             } else {
               alert('❌ Error: ' + (result.error || 'Failed to submit for review'));
@@ -4627,7 +4683,8 @@
               alert('✅ Post submitted for client review!' + emailMsg);
               // Refresh post detail
               openPostDetail(postId);
-              // Refresh calendar
+              // Invalidate cache and refresh calendar
+              invalidateCalendarCache();
               loadCalendarData();
             } else {
               alert('❌ Error: ' + (result.error || 'Failed to submit for review'));
