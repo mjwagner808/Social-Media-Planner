@@ -23,10 +23,11 @@ function generateAccessToken() {
  * @param {string} accessLevel - 'Full' or 'Read_Only'
  * @returns {Object} - {success: true, token: '...', url: '...'} or error
  */
-function grantClientAccess(clientId, email, accessLevel, postIds) {
+function grantClientAccess(clientId, email, accessLevel, postIds, accessType) {
   try {
     Logger.log('Granting client access for: ' + email + ', Client: ' + clientId);
     Logger.log('Post IDs: ' + (postIds || 'ALL'));
+    Logger.log('Access Type: ' + (accessType || 'Full'));
 
     // Validate inputs
     if (!clientId || !email) {
@@ -34,7 +35,8 @@ function grantClientAccess(clientId, email, accessLevel, postIds) {
     }
 
     accessLevel = accessLevel || 'Full';
-    // postIds is optional - if not provided, grants access to all client posts
+    accessType = accessType || 'Restricted';  // Default to Restricted (only sees assigned posts)
+    // postIds is optional - if not provided, user won't see any posts until assigned
 
     // Check if client exists
     var client = getClientById(clientId);
@@ -107,6 +109,11 @@ function grantClientAccess(clientId, email, accessLevel, postIds) {
           // Store comma-separated post IDs, or empty for all posts
           rowData.push(postIds || '');
           break;
+        case 'Access_Type':
+          // Restricted = sees only posts in Post_IDs (default for regular reviewers)
+          // Full = sees all posts regardless of Post_IDs (only for client admins)
+          rowData.push(accessType || 'Restricted');
+          break;
         case 'Access_URL':
           // Store full access URL for easy reference
           rowData.push(getClientAccessUrl(token));
@@ -154,6 +161,7 @@ function addPostToClientAccess(clientId, email, postId) {
     var emailCol = headers.indexOf('Email');
     var postIdsCol = headers.indexOf('Post_IDs');
     var statusCol = headers.indexOf('Status');
+    var accessTypeCol = headers.indexOf('Access_Type');
 
     // Find the authorized client record
     var foundRow = -1;
@@ -167,26 +175,31 @@ function addPostToClientAccess(clientId, email, postId) {
     }
 
     if (foundRow === -1) {
-      // No existing access - grant full access for this client with this specific post
-      Logger.log('No existing access found - creating new access record');
-      grantClientAccess(clientId, email, 'Full', postId);
+      // No existing access - create new access record with restricted access to this specific post
+      Logger.log('No existing access found - creating new access record with Restricted access');
+      grantClientAccess(clientId, email, 'Full', postId, 'Restricted');
       return;
     }
 
-    // Get current Post_IDs
+    // Get current Post_IDs and Access_Type
     var currentPostIds = data[foundRow][postIdsCol];
+    var accessType = data[foundRow][accessTypeCol] || 'Restricted';
     Logger.log('Current Post_IDs: ' + currentPostIds);
+    Logger.log('Access_Type: ' + accessType);
 
-    // If empty, this client has full access to all posts - don't change it
-    if (!currentPostIds || currentPostIds.trim() === '') {
-      Logger.log('Client has full access (empty Post_IDs) - no change needed');
+    // If user has Full access type, don't modify their Post_IDs (metadata only)
+    if (accessType === 'Full') {
+      Logger.log('User has Full access type - assignment is metadata only, not modifying Post_IDs');
       return;
     }
 
-    // Parse existing post IDs
-    var postIdArray = currentPostIds.split(',').map(function(id) {
-      return id.trim();
-    });
+    // For Restricted users, add the post to their Post_IDs list
+    var postIdArray = [];
+    if (currentPostIds && currentPostIds.trim() !== '') {
+      postIdArray = currentPostIds.split(',').map(function(id) {
+        return id.trim();
+      });
+    }
 
     // Check if post ID already exists
     if (postIdArray.indexOf(postId) > -1) {
@@ -372,9 +385,13 @@ function getClientPosts(clientId, authorizedClient) {
     Logger.log('Getting posts for client: ' + clientId);
 
     // Get all posts for this client
+    // IMPORTANT: Only show posts that have reached client review stage or later
+    var allowedStatuses = ['Client_Review', 'Approved', 'Scheduled', 'Published'];
+
     var posts = _readSheetAsObjects_('Posts', {
       filterFn: function(p) {
-        return p.Client_ID === clientId;
+        // Filter by Client_ID AND Status
+        return p.Client_ID === clientId && allowedStatuses.indexOf(p.Status) > -1;
       },
       coerceFn: function(p) {
         // Convert date fields to ISO strings
@@ -392,18 +409,26 @@ function getClientPosts(clientId, authorizedClient) {
       }
     });
 
-    // Filter by Post_IDs if authorizedClient has specific post restrictions
-    if (authorizedClient && authorizedClient.Post_IDs && authorizedClient.Post_IDs.trim() !== '') {
+    // Filter by Post_IDs for Restricted users (default behavior)
+    // Only Full access users (client admins) see all posts
+    var accessType = authorizedClient ? (authorizedClient.Access_Type || 'Restricted') : 'Restricted';
+
+    if (authorizedClient &&
+        accessType === 'Restricted' &&
+        authorizedClient.Post_IDs &&
+        authorizedClient.Post_IDs.trim() !== '') {
       var allowedPostIds = authorizedClient.Post_IDs.split(',').map(function(id) {
         return id.trim();
       });
-      Logger.log('Filtering to specific posts: ' + allowedPostIds.join(', '));
+      Logger.log('Access Type: Restricted - Filtering to specific posts: ' + allowedPostIds.join(', '));
 
       posts = posts.filter(function(post) {
         return allowedPostIds.indexOf(post.ID) > -1;
       });
 
       Logger.log('After filtering: ' + posts.length + ' posts');
+    } else {
+      Logger.log('Access Type: ' + accessType + ' - Showing all client posts');
     }
 
     Logger.log('Found ' + posts.length + ' posts for client: ' + clientId);
@@ -418,11 +443,12 @@ function getClientPosts(clientId, authorizedClient) {
 /**
  * Get client posts with images for calendar view
  * @param {string} clientId - Client ID
+ * @param {Object} authorizedClient - Authorized client record (optional)
  * @returns {Array} - Array of posts with image URLs
  */
-function getClientPostsWithImages(clientId) {
+function getClientPostsWithImages(clientId, authorizedClient) {
   try {
-    var posts = getClientPosts(clientId);
+    var posts = getClientPosts(clientId, authorizedClient);
 
     // Get Post_Platforms data to extract images
     var platformSheet = _getSheet_('Post_Platforms');
@@ -458,11 +484,16 @@ function getClientPostsWithImages(clientId) {
       if (mediaUrl) {
         var extractedUrl = extractUrlFromImageFormula(mediaUrl);
         if (extractedUrl) {
+          // Carousel detection: Check both Media_Type field AND URL pattern
+          // Box.com folder URLs contain "/folder/" in the path (these are carousels)
+          var mediaTypeIsCarousel = String(mediaType).toLowerCase().indexOf('carousel') > -1;
+          var urlIsFolder = String(extractedUrl).toLowerCase().indexOf('/folder/') > -1;
+
           platformsMap[postId].push({
             platform: platform,
             url: extractedUrl,
             mediaType: mediaType,
-            isCarousel: String(mediaType).toLowerCase().indexOf('carousel') > -1
+            isCarousel: mediaTypeIsCarousel || urlIsFolder
           });
         }
       }

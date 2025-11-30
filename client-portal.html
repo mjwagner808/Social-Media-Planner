@@ -529,7 +529,13 @@
 <body>
   <div class="header">
     <div class="logo">📅 Social Media Content Calendar</div>
-    <div class="client-info" id="clientInfo">Loading...</div>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <button id="manageReviewersBtn" onclick="openManageReviewers()"
+              style="display: none; padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+        👥 Manage Reviewers
+      </button>
+      <div class="client-info" id="clientInfo">Loading...</div>
+    </div>
   </div>
 
   <div class="container">
@@ -612,6 +618,45 @@
     </div>
   </div>
 
+  <!-- Manage Reviewers Modal -->
+  <div id="manageReviewersModal" class="modal-overlay" onclick="closeManageReviewers(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>👥 Manage Reviewers</h2>
+        <button type="button" class="modal-close" onclick="closeManageReviewers()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: #5f6368; margin-bottom: 20px;">
+          Add or remove people from your organization who can review and approve posts.
+        </p>
+
+        <!-- Add Reviewer Form -->
+        <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: #202124;">Add New Reviewer</h3>
+          <div style="display: flex; gap: 8px;">
+            <input type="email" id="newReviewerEmail" placeholder="reviewer@company.com"
+                   style="flex: 1; padding: 8px 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">
+            <button onclick="addReviewer()"
+                    style="padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap;">
+              + Add
+            </button>
+          </div>
+          <div id="addReviewerMessage" style="margin-top: 8px; font-size: 13px;"></div>
+        </div>
+
+        <!-- Current Reviewers List -->
+        <div>
+          <h3 style="font-size: 14px; margin-bottom: 12px; color: #202124;">Current Reviewers</h3>
+          <div id="reviewersList">
+            <div style="text-align: center; padding: 20px; color: #5f6368;">
+              Loading reviewers...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Configuration - UPDATE THIS URL after deployment
     const API_URL = 'https://script.google.com/macros/s/AKfycbwiRbuwQTrj--xfmP7klfZ_TJratdAySuujz3oSZ3-31SgTY0KA5Zsz75BDLBU-sCCV/exec';
@@ -649,6 +694,11 @@
           var displayName = clientInfo.Email || clientInfo.Client_Name;
           document.getElementById('welcomeTitle').textContent = 'Welcome, ' + displayName;
           document.getElementById('clientInfo').textContent = clientInfo.Client_Name;
+
+          // Show Manage Reviewers button only for client admins
+          if (clientInfo.Is_Admin) {
+            document.getElementById('manageReviewersBtn').style.display = 'block';
+          }
 
           showSuccess('Access granted. ' + allPosts.length + ' posts available.');
           document.getElementById('statusFilters').style.display = 'flex';
@@ -982,6 +1032,19 @@
         html += '</div>';
       }
 
+      // Share with Reviewers section (only for client admins)
+      if (clientInfo && clientInfo.Is_Admin) {
+        html += '<div id="shareReviewers" style="margin-top: 24px; border-top: 1px solid #dadce0; padding-top: 24px;">';
+        html += '<h3 style="margin-bottom: 12px;">👥 Share with Reviewers</h3>';
+        html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px;">';
+        html += '<div id="reviewerCheckboxes" style="margin-bottom: 12px;">';
+        html += '<div style="text-align: center; padding: 12px; color: #5f6368;">Loading reviewers...</div>';
+        html += '</div>';
+        html += '<div style="font-size: 12px; color: #5f6368; font-style: italic;">Select which reviewers should have access to this post. Unchecked reviewers will not see this post.</div>';
+        html += '</div>';
+        html += '</div>';
+      }
+
       // Comment history section (will be loaded dynamically)
       html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
 
@@ -1049,6 +1112,11 @@
 
       // Load comment history
       loadCommentHistory(postId);
+
+      // Load reviewer checkboxes for client admins
+      if (clientInfo && clientInfo.Is_Admin) {
+        loadReviewerCheckboxes(postId);
+      }
     }
 
     function loadCommentHistory(postId) {
@@ -1222,6 +1290,352 @@
         delete window[callbackName];
       };
       document.body.appendChild(script);
+    }
+
+    // ========== REVIEWER MANAGEMENT FUNCTIONS ==========
+
+    /**
+     * Open Manage Reviewers modal
+     */
+    function openManageReviewers() {
+      document.getElementById('manageReviewersModal').style.display = 'flex';
+      loadReviewers();
+    }
+
+    /**
+     * Close Manage Reviewers modal
+     */
+    function closeManageReviewers(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.getElementById('manageReviewersModal').style.display = 'none';
+      document.getElementById('newReviewerEmail').value = '';
+      document.getElementById('addReviewerMessage').innerHTML = '';
+    }
+
+    /**
+     * Load current reviewers for this client
+     */
+    function loadReviewers() {
+      const container = document.getElementById('reviewersList');
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: #5f6368;">Loading reviewers...</div>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'loadReviewersCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Reviewers API Response:', data);
+
+        if (data.success) {
+          displayReviewers(data.reviewers || []);
+        } else {
+          container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ea4335;">Error loading reviewers: ' + (data.error || 'Unknown error') + '</div>';
+        }
+
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=getClientReviewers&token=' + encodeURIComponent(token) + '&callback=' + callbackName;
+      script.onerror = function() {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ea4335;">Failed to load reviewers. Please try again.</div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Display reviewers list
+     */
+    function displayReviewers(reviewers) {
+      const container = document.getElementById('reviewersList');
+
+      if (!reviewers || reviewers.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #5f6368;">No reviewers yet. Add one above to get started.</div>';
+        return;
+      }
+
+      let html = '<div style="display: grid; gap: 8px;">';
+      reviewers.forEach(function(reviewer) {
+        const isCurrentUser = reviewer.Email === clientInfo.Email;
+        html += '<div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; background: white;">';
+        html += '  <div>';
+        html += '    <div style="font-weight: 500;">' + escapeHtml(reviewer.Email) + (isCurrentUser ? ' <span style="color: #5f6368; font-weight: normal; font-size: 12px;">(You)</span>' : '') + '</div>';
+
+        // Show access level badge
+        var accessBadge = '';
+        var accessColor = '#5f6368';
+        if (reviewer.Access_Level === 'Admin') {
+          accessBadge = 'Admin';
+          accessColor = '#ea4335';
+        } else if (reviewer.Access_Level === 'Full') {
+          accessBadge = 'Full Access';
+          accessColor = '#34a853';
+        } else if (reviewer.Access_Level === 'Read_Only') {
+          accessBadge = 'Read Only';
+          accessColor = '#4285f4';
+        }
+
+        html += '    <div style="font-size: 12px; color: ' + accessColor + '; margin-top: 4px;">' + accessBadge + '</div>';
+        html += '  </div>';
+
+        // Don't allow removing yourself or other admins
+        if (!isCurrentUser && reviewer.Access_Level !== 'Admin') {
+          html += '  <button onclick="removeReviewer(\'' + escapeHtml(reviewer.ID) + '\', \'' + escapeHtml(reviewer.Email) + '\')" style="padding: 6px 12px; background: white; color: #ea4335; border: 1px solid #ea4335; border-radius: 4px; cursor: pointer; font-size: 13px;">Remove</button>';
+        }
+
+        html += '</div>';
+      });
+      html += '</div>';
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Add a new reviewer
+     */
+    function addReviewer() {
+      const email = document.getElementById('newReviewerEmail').value.trim();
+      const messageEl = document.getElementById('addReviewerMessage');
+
+      // Validation
+      if (!email) {
+        messageEl.innerHTML = '<span style="color: #ea4335;">Please enter an email address.</span>';
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        messageEl.innerHTML = '<span style="color: #ea4335;">Please enter a valid email address.</span>';
+        return;
+      }
+
+      // Check if adding yourself
+      if (email === clientInfo.Email) {
+        messageEl.innerHTML = '<span style="color: #ea4335;">You already have access as an admin.</span>';
+        return;
+      }
+
+      messageEl.innerHTML = '<span style="color: #5f6368;">Adding reviewer...</span>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'addReviewerCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Add Reviewer API Response:', data);
+
+        if (data.success) {
+          messageEl.innerHTML = '<span style="color: #34a853;">✓ Reviewer added successfully!</span>';
+          document.getElementById('newReviewerEmail').value = '';
+
+          // Reload reviewers list
+          setTimeout(function() {
+            messageEl.innerHTML = '';
+            loadReviewers();
+          }, 1500);
+        } else {
+          messageEl.innerHTML = '<span style="color: #ea4335;">Error: ' + (data.error || 'Failed to add reviewer') + '</span>';
+        }
+
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=addReviewer&token=' + encodeURIComponent(token) +
+                   '&email=' + encodeURIComponent(email) + '&callback=' + callbackName;
+      script.onerror = function() {
+        messageEl.innerHTML = '<span style="color: #ea4335;">Failed to connect. Please try again.</span>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Remove a reviewer
+     */
+    function removeReviewer(reviewerId, reviewerEmail) {
+      if (!confirm('Remove ' + reviewerEmail + ' from reviewers?\n\nThey will no longer be able to access or approve posts.')) {
+        return;
+      }
+
+      const container = document.getElementById('reviewersList');
+      container.innerHTML = '<div style="text-align: center; padding: 20px; color: #5f6368;">Removing reviewer...</div>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'removeReviewerCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Remove Reviewer API Response:', data);
+
+        if (data.success) {
+          // Reload reviewers list
+          loadReviewers();
+        } else {
+          container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ea4335;">Error: ' + (data.error || 'Failed to remove reviewer') + '</div>';
+        }
+
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=removeReviewer&token=' + encodeURIComponent(token) +
+                   '&reviewerId=' + encodeURIComponent(reviewerId) + '&callback=' + callbackName;
+      script.onerror = function() {
+        container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ea4335;">Failed to connect. Please try again.</div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Load reviewer checkboxes for post sharing (client admin only)
+     */
+    function loadReviewerCheckboxes(postId) {
+      const container = document.getElementById('reviewerCheckboxes');
+      if (!container) return;
+
+      container.innerHTML = '<div style="text-align: center; padding: 12px; color: #5f6368;">Loading reviewers...</div>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'loadReviewerCheckboxesCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Reviewer Checkboxes API Response:', data);
+
+        if (data.success) {
+          displayReviewerCheckboxes(postId, data.reviewers || [], data.currentAssignments || []);
+        } else {
+          container.innerHTML = '<div style="text-align: center; padding: 12px; color: #ea4335;">Error: ' + (data.error || 'Failed to load reviewers') + '</div>';
+        }
+
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=getPostReviewers&token=' + encodeURIComponent(token) +
+                   '&postId=' + encodeURIComponent(postId) + '&callback=' + callbackName;
+      script.onerror = function() {
+        container.innerHTML = '<div style="text-align: center; padding: 12px; color: #ea4335;">Failed to load reviewers.</div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Display reviewer checkboxes
+     */
+    function displayReviewerCheckboxes(postId, reviewers, currentAssignments) {
+      const container = document.getElementById('reviewerCheckboxes');
+      if (!container) return;
+
+      // Filter out admins and current user
+      const selectableReviewers = reviewers.filter(function(r) {
+        return r.Access_Level !== 'Admin' && r.Email !== clientInfo.Email;
+      });
+
+      if (selectableReviewers.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 12px; color: #5f6368; font-style: italic;">No reviewers available. Add reviewers via "Manage Reviewers" button.</div>';
+        return;
+      }
+
+      let html = '<div style="display: grid; gap: 8px;">';
+
+      selectableReviewers.forEach(function(reviewer) {
+        const isAssigned = currentAssignments.indexOf(reviewer.ID) > -1;
+        const checkboxId = 'reviewer_' + reviewer.ID;
+
+        html += '<label style="display: flex; align-items: center; padding: 8px; background: white; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; hover:background: #f8f9fa;">';
+        html += '<input type="checkbox" id="' + checkboxId + '" value="' + escapeHtml(reviewer.ID) + '" ' + (isAssigned ? 'checked' : '') + ' onchange="updatePostReviewers(\'' + postId + '\')" style="margin-right: 12px; width: 18px; height: 18px; cursor: pointer;">';
+        html += '<div style="flex: 1;">';
+        html += '<div style="font-weight: 500; font-size: 14px;">' + escapeHtml(reviewer.Email) + '</div>';
+        html += '<div style="font-size: 12px; color: #5f6368;">Full Access</div>';
+        html += '</div>';
+        html += '</label>';
+      });
+
+      html += '</div>';
+
+      container.innerHTML = html;
+    }
+
+    /**
+     * Update post reviewer assignments when checkboxes change
+     */
+    function updatePostReviewers(postId) {
+      // Get all checked reviewer IDs
+      const checkboxes = document.querySelectorAll('#reviewerCheckboxes input[type="checkbox"]');
+      const selectedReviewerIds = [];
+
+      checkboxes.forEach(function(checkbox) {
+        if (checkbox.checked) {
+          selectedReviewerIds.push(checkbox.value);
+        }
+      });
+
+      // Show loading state
+      const container = document.getElementById('reviewerCheckboxes');
+      const originalHtml = container.innerHTML;
+      container.style.opacity = '0.5';
+      container.style.pointerEvents = 'none';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'updatePostReviewersCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Update Post Reviewers API Response:', data);
+
+        container.style.opacity = '1';
+        container.style.pointerEvents = 'auto';
+
+        if (!data.success) {
+          alert('Error updating reviewers: ' + (data.error || 'Unknown error'));
+          // Reload to reset checkboxes
+          loadReviewerCheckboxes(postId);
+        }
+        // If successful, keep current checkbox states
+
+        delete window[callbackName];
+        document.body.removeChild(script);
+      };
+
+      const script = document.createElement('script');
+      script.src = API_URL + '?action=updatePostReviewers&token=' + encodeURIComponent(token) +
+                   '&postId=' + encodeURIComponent(postId) +
+                   '&reviewerIds=' + encodeURIComponent(selectedReviewerIds.join(',')) +
+                   '&callback=' + callbackName;
+      script.onerror = function() {
+        container.style.opacity = '1';
+        container.style.pointerEvents = 'auto';
+        alert('Failed to connect. Please try again.');
+        loadReviewerCheckboxes(postId);
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    // Helper function to escape HTML
+    function escapeHtml(unsafe) {
+      if (!unsafe) return '';
+      return unsafe
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     // Initialize on page load

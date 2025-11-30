@@ -912,6 +912,9 @@
           <button class="btn btn-secondary" onclick="openTemplateManager()">
             📋 Templates
           </button>
+          <button class="btn btn-secondary" onclick="openAdminPanel()">
+            👥 Admin
+          </button>
           <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
             📊 Strategy
           </button>
@@ -1222,6 +1225,139 @@
         </div>
       </div>
     </div>
+
+    <!-- Admin Panel Modal -->
+    <div class="modal-overlay" id="adminPanelModal">
+      <div class="modal-content" style="max-width: 1000px;">
+        <div class="modal-header">
+          <h2>👥 Admin Panel</h2>
+          <button class="modal-close" onclick="closeAdminPanel()">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Tab Navigation -->
+          <div style="border-bottom: 2px solid #dadce0; margin-bottom: 24px;">
+            <div style="display: flex; gap: 24px;">
+              <button class="admin-tab active" onclick="switchAdminTab('team')" id="tab-team">
+                Team Members
+              </button>
+              <button class="admin-tab" onclick="switchAdminTab('clients')" id="tab-clients">
+                Client Access
+              </button>
+            </div>
+          </div>
+
+          <!-- Team Members Tab -->
+          <div id="admin-tab-team" class="admin-tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <h3 style="margin: 0;">Agency Team Members</h3>
+              <button class="btn btn-primary" onclick="openAddUserForm()">+ Add Team Member</button>
+            </div>
+
+            <div id="teamMembersList">
+              <div style="text-align: center; padding: 40px; color: #9aa0a6;">
+                <p>Loading team members...</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Client Access Tab -->
+          <div id="admin-tab-clients" class="admin-tab-content" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <h3 style="margin: 0;">Client Access Management</h3>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <label for="clientAccessFilter" style="color: #5f6368; font-size: 14px; white-space: nowrap;">Filter by Client:</label>
+                <select id="clientAccessFilter" onchange="filterClientAccess()" style="padding: 6px 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px; min-width: 200px;">
+                  <option value="">All Clients</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="clientAccessList">
+              <div style="text-align: center; padding: 40px; color: #9aa0a6;">
+                <p>Loading client access...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" onclick="closeAdminPanel()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal-overlay" id="addUserModal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h2>Add Team Member</h2>
+          <button class="modal-close" onclick="closeAddUserForm()">&times;</button>
+        </div>
+
+        <div class="modal-body">
+          <form id="addUserForm">
+            <div class="form-group">
+              <label class="required" for="newUserEmail">Email</label>
+              <input type="email" id="newUserEmail" name="email" required placeholder="name@finn.com">
+            </div>
+
+            <div class="form-group">
+              <label class="required" for="newUserFullName">Full Name</label>
+              <input type="text" id="newUserFullName" name="fullName" required placeholder="John Smith">
+            </div>
+
+            <div class="form-group">
+              <label class="required" for="newUserRole">Role</label>
+              <select id="newUserRole" name="role" required>
+                <option value="">Select role...</option>
+                <option value="Admin">Admin - Full access to everything</option>
+                <option value="Editor">Editor - Can create, edit, and approve posts</option>
+                <option value="Creator">Creator - Can create and edit posts</option>
+                <option value="Viewer">Viewer - Read-only access</option>
+              </select>
+            </div>
+          </form>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" onclick="closeAddUserForm()">Cancel</button>
+          <button class="btn btn-primary" type="button" id="addUserSubmitBtn" onclick="submitAddUser()">Add User</button>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .admin-tab {
+        background: none;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 12px 4px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 500;
+        color: #5f6368;
+        transition: all 0.2s;
+      }
+
+      .admin-tab:hover {
+        color: #202124;
+      }
+
+      .admin-tab.active {
+        color: #1a73e8;
+        border-bottom-color: #1a73e8;
+      }
+
+      .admin-tab-content {
+        animation: fadeIn 0.3s;
+      }
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+    </style>
 
     <script>
       // Server-side values (force-print with JavaScript string escaping)
@@ -1963,6 +2099,657 @@
           .deletePost(postId);
       }
 
+      // ========================================
+      // ADMIN PANEL - TEAM MANAGEMENT FUNCTIONS
+      // ========================================
+
+      /**
+       * Open admin panel and load team members
+       */
+      function openAdminPanel() {
+        const modal = document.getElementById('adminPanelModal');
+        modal.classList.add('active');
+
+        // Default to team tab
+        switchAdminTab('team');
+      }
+
+      /**
+       * Close admin panel
+       */
+      function closeAdminPanel() {
+        const modal = document.getElementById('adminPanelModal');
+        modal.classList.remove('active');
+      }
+
+      /**
+       * Switch between admin tabs
+       */
+      function switchAdminTab(tabName) {
+        // Update tab buttons
+        const teamTabBtn = document.getElementById('tab-team');
+        const clientsTabBtn = document.getElementById('tab-clients');
+
+        if (tabName === 'team') {
+          teamTabBtn.classList.add('active');
+          clientsTabBtn.classList.remove('active');
+          document.getElementById('admin-tab-team').style.display = 'block';
+          document.getElementById('admin-tab-clients').style.display = 'none';
+
+          // Load team members
+          loadTeamMembers();
+        } else {
+          teamTabBtn.classList.remove('active');
+          clientsTabBtn.classList.add('active');
+          document.getElementById('admin-tab-team').style.display = 'none';
+          document.getElementById('admin-tab-clients').style.display = 'block';
+
+          // Load client access (to be implemented in Phase 2)
+          loadClientAccess();
+        }
+      }
+
+      /**
+       * Load team members from backend
+       */
+      function loadTeamMembers() {
+        const container = document.getElementById('teamMembersList');
+        container.innerHTML = '<p style="text-align: center; color: #5f6368;">Loading team members...</p>';
+
+        google.script.run
+          .withSuccessHandler(function(users) {
+            displayTeamMembers(users);
+          })
+          .withFailureHandler(function(error) {
+            container.innerHTML = '<p style="color: #ea4335;">Error loading team members: ' + error.message + '</p>';
+          })
+          .getAllUsers();
+      }
+
+      /**
+       * Display team members as cards
+       */
+      function displayTeamMembers(users) {
+        const container = document.getElementById('teamMembersList');
+
+        if (!users || users.length === 0) {
+          container.innerHTML = '<p style="text-align: center; color: #5f6368;">No team members found. Click "Add Team Member" to get started.</p>';
+          return;
+        }
+
+        let html = '<div style="display: grid; gap: 16px;">';
+
+        users.forEach(function(user) {
+          // Only show active users
+          if (user.Status !== 'Active') return;
+
+          const roleColor = {
+            'Admin': '#ea4335',
+            'Editor': '#fbbc04',
+            'Creator': '#34a853',
+            'Viewer': '#4285f4'
+          }[user.Default_Role] || '#5f6368';
+
+          html += '<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 16px; background: white;">';
+          html += '  <div style="display: flex; justify-content: space-between; align-items: start;">';
+          html += '    <div style="flex: 1;">';
+          html += '      <div style="font-weight: 500; margin-bottom: 4px;">' + escapeHtml(user.Full_Name || '') + '</div>';
+          html += '      <div style="color: #5f6368; font-size: 14px; margin-bottom: 8px;">' + escapeHtml(user.Email || '') + '</div>';
+          html += '      <div style="display: inline-block; padding: 4px 8px; border-radius: 4px; background: ' + roleColor + '; color: white; font-size: 12px; font-weight: 500;">';
+          html += escapeHtml(user.Default_Role || 'No Role');
+          html += '      </div>';
+          html += '    </div>';
+          html += '    <div style="display: flex; gap: 8px;">';
+
+          // Role change dropdown
+          html += '      <select onchange="changeUserRole(\'' + user.ID + '\', this.value)" style="padding: 6px 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
+          html += '        <option value="">Change Role...</option>';
+          html += '        <option value="Admin"' + (user.Default_Role === 'Admin' ? ' selected' : '') + '>Admin</option>';
+          html += '        <option value="Editor"' + (user.Default_Role === 'Editor' ? ' selected' : '') + '>Editor</option>';
+          html += '        <option value="Creator"' + (user.Default_Role === 'Creator' ? ' selected' : '') + '>Creator</option>';
+          html += '        <option value="Viewer"' + (user.Default_Role === 'Viewer' ? ' selected' : '') + '>Viewer</option>';
+          html += '      </select>';
+
+          // Deactivate button
+          html += '      <button onclick="deactivateUserConfirm(\'' + user.ID + '\', \'' + escapeHtml(user.Full_Name || user.Email) + '\')" ';
+          html += '        style="padding: 6px 12px; background: white; color: #ea4335; border: 1px solid #ea4335; border-radius: 4px; cursor: pointer; font-size: 14px;">';
+          html += '        Deactivate';
+          html += '      </button>';
+          html += '    </div>';
+          html += '  </div>';
+
+          // Show created info
+          if (user.Created_Date) {
+            const createdDate = new Date(user.Created_Date).toLocaleDateString();
+            html += '  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f3f4; font-size: 12px; color: #5f6368;">';
+            html += '    Added on ' + createdDate;
+            if (user.Created_By) {
+              html += ' by ' + escapeHtml(user.Created_By);
+            }
+            html += '  </div>';
+          }
+
+          html += '</div>';
+        });
+
+        html += '</div>';
+
+        container.innerHTML = html;
+      }
+
+      /**
+       * Open add user form
+       */
+      function openAddUserForm() {
+        const modal = document.getElementById('addUserModal');
+        modal.classList.add('active');
+
+        // Clear form
+        document.getElementById('newUserEmail').value = '';
+        document.getElementById('newUserFullName').value = '';
+        document.getElementById('newUserRole').value = 'Creator';
+      }
+
+      /**
+       * Close add user form
+       */
+      function closeAddUserForm() {
+        const modal = document.getElementById('addUserModal');
+        modal.classList.remove('active');
+      }
+
+      /**
+       * Submit new user form
+       */
+      function submitAddUser() {
+        const email = document.getElementById('newUserEmail').value.trim();
+        const fullName = document.getElementById('newUserFullName').value.trim();
+        const role = document.getElementById('newUserRole').value;
+
+        // Validate
+        if (!email) {
+          alert('Please enter an email address');
+          return;
+        }
+
+        if (!fullName) {
+          alert('Please enter a full name');
+          return;
+        }
+
+        if (!role) {
+          alert('Please select a role');
+          return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          alert('Please enter a valid email address');
+          return;
+        }
+
+        // Show loading
+        const submitBtn = document.getElementById('addUserSubmitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Adding...';
+
+        // Call backend
+        google.script.run
+          .withSuccessHandler(function(result) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add User';
+
+            if (result.success) {
+              alert('✅ User added successfully!');
+              closeAddUserForm();
+              loadTeamMembers(); // Reload the list
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to add user'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Add User';
+            alert('❌ Error: ' + error.message);
+          })
+          .addUser({
+            email: email,
+            fullName: fullName,
+            role: role
+          });
+      }
+
+      /**
+       * Change user role
+       */
+      function changeUserRole(userId, newRole) {
+        if (!newRole) return; // User selected "Change Role..." placeholder
+
+        if (!confirm('Change this user\'s role to ' + newRole + '?')) {
+          // Reset dropdown to current value
+          loadTeamMembers();
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Role updated successfully');
+              loadTeamMembers(); // Reload to show updated role
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to update role'));
+              loadTeamMembers(); // Reload to reset dropdown
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+            loadTeamMembers();
+          })
+          .updateUser(userId, {role: newRole});
+      }
+
+      /**
+       * Deactivate user with confirmation
+       */
+      function deactivateUserConfirm(userId, userName) {
+        if (!confirm('⚠️ Are you sure you want to deactivate ' + userName + '?\n\nThey will no longer be able to access the system.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ User deactivated successfully');
+              loadTeamMembers(); // Reload to remove from list
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to deactivate user'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .deactivateUser(userId);
+      }
+
+      /**
+       * Load client access records from backend
+       */
+      // Store all authorized clients for filtering
+      let allAuthorizedClients = [];
+
+      function loadClientAccess() {
+        const container = document.getElementById('clientAccessList');
+        container.innerHTML = '<p style="text-align: center; color: #5f6368;">Loading client access records...</p>';
+
+        google.script.run
+          .withSuccessHandler(function(authorizedClients) {
+            // Store globally for filtering
+            allAuthorizedClients = authorizedClients;
+
+            // Populate filter dropdown
+            populateClientFilter(authorizedClients);
+
+            // Display all by default
+            displayClientAccess(authorizedClients);
+          })
+          .withFailureHandler(function(error) {
+            container.innerHTML = '<p style="color: #ea4335;">Error loading client access: ' + error.message + '</p>';
+          })
+          .getAllAuthorizedClients();
+      }
+
+      /**
+       * Populate client filter dropdown with unique clients
+       */
+      function populateClientFilter(authorizedClients) {
+        const filter = document.getElementById('clientAccessFilter');
+        if (!filter) return;
+
+        // Get unique clients
+        const clientsMap = {};
+        authorizedClients.forEach(function(ac) {
+          if (ac.Status === 'Active' && ac.Client_ID && ac.Client_Name) {
+            clientsMap[ac.Client_ID] = ac.Client_Name;
+          }
+        });
+
+        // Sort clients alphabetically
+        const clients = Object.keys(clientsMap).sort(function(a, b) {
+          return clientsMap[a].localeCompare(clientsMap[b]);
+        });
+
+        // Populate dropdown
+        let html = '<option value="">All Clients (' + authorizedClients.filter(ac => ac.Status === 'Active').length + ')</option>';
+        clients.forEach(function(clientId) {
+          const count = authorizedClients.filter(ac => ac.Client_ID === clientId && ac.Status === 'Active').length;
+          html += '<option value="' + escapeHtml(clientId) + '">' + escapeHtml(clientsMap[clientId]) + ' (' + count + ')</option>';
+        });
+
+        filter.innerHTML = html;
+      }
+
+      /**
+       * Filter client access by selected client
+       */
+      function filterClientAccess() {
+        const filter = document.getElementById('clientAccessFilter');
+        const selectedClientId = filter ? filter.value : '';
+
+        // Filter the list
+        let filteredClients = allAuthorizedClients;
+        if (selectedClientId) {
+          filteredClients = allAuthorizedClients.filter(function(ac) {
+            return ac.Client_ID === selectedClientId;
+          });
+        }
+
+        // Display filtered results
+        displayClientAccess(filteredClients);
+      }
+
+      /**
+       * Display client access records as cards
+       */
+      function displayClientAccess(authorizedClients) {
+        const container = document.getElementById('clientAccessList');
+
+        if (!authorizedClients || authorizedClients.length === 0) {
+          container.innerHTML = '<p style="text-align: center; color: #5f6368;">No client access records found. Grant client access from a post to get started.</p>';
+          return;
+        }
+
+        let html = '<div style="display: grid; gap: 16px;">';
+
+        authorizedClients.forEach(function(ac) {
+          // Only show active records
+          if (ac.Status !== 'Active') return;
+
+          const isAdmin = ac.Access_Level === 'Admin' && (!ac.Post_IDs || ac.Post_IDs === '');
+          const accessLevelColor = {
+            'Admin': '#ea4335',
+            'Full': '#34a853',
+            'Read_Only': '#4285f4'
+          }[ac.Access_Level] || '#5f6368';
+
+          html += '<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 16px; background: white;">';
+          html += '  <div style="display: flex; justify-content: space-between; align-items: start;">';
+          html += '    <div style="flex: 1;">';
+
+          // Client name and email
+          html += '      <div style="font-weight: 500; margin-bottom: 4px;">';
+          html += escapeHtml(ac.Client_Name || 'Unknown Client');
+          if (isAdmin) {
+            html += ' <span style="margin-left: 8px; padding: 2px 6px; background: #ea4335; color: white; font-size: 11px; border-radius: 3px; font-weight: 600;">CLIENT ADMIN</span>';
+          }
+          html += '      </div>';
+          html += '      <div style="color: #5f6368; font-size: 14px; margin-bottom: 12px;">' + escapeHtml(ac.Email || '') + '</div>';
+
+          // Two-row permission display
+          html += '      <div style="display: grid; gap: 6px; margin-bottom: 4px;">';
+
+          // Row 1: Permission Level
+          html += '        <div style="display: flex; align-items: center; gap: 8px;">';
+          html += '          <span style="color: #5f6368; font-size: 12px; min-width: 90px;">Permission:</span>';
+          html += '          <div style="display: inline-block; padding: 4px 8px; border-radius: 4px; background: ' + accessLevelColor + '; color: white; font-size: 12px; font-weight: 500;">';
+          html += escapeHtml(ac.Access_Level || 'Full');
+          html += '          </div>';
+
+          // Show what this permission means
+          var permissionDesc = '';
+          if (ac.Access_Level === 'Admin') {
+            permissionDesc = 'Can approve/reject + manage reviewers';
+          } else if (ac.Access_Level === 'Full') {
+            permissionDesc = 'Can approve/reject posts';
+          } else if (ac.Access_Level === 'Read_Only') {
+            permissionDesc = 'View only';
+          }
+          html += '          <span style="color: #5f6368; font-size: 11px; font-style: italic;">' + permissionDesc + '</span>';
+          html += '        </div>';
+
+          // Row 2: Post Scope
+          html += '        <div style="display: flex; align-items: center; gap: 8px;">';
+          html += '          <span style="color: #5f6368; font-size: 12px; min-width: 90px;">Post Access:</span>';
+
+          const hasAllPosts = !ac.Post_IDs || ac.Post_IDs === '';
+          if (hasAllPosts) {
+            html += '          <div style="display: inline-block; padding: 4px 8px; border-radius: 4px; background: #34a853; color: white; font-size: 12px; font-weight: 500;">';
+            html += 'All Posts';
+            html += '          </div>';
+            html += '          <span style="color: #5f6368; font-size: 11px; font-style: italic;">Can see all posts for ' + escapeHtml(ac.Client_Name || 'this client') + '</span>';
+          } else {
+            const postCount = ac.Post_IDs.split(',').length;
+            html += '          <div style="display: inline-block; padding: 4px 8px; border-radius: 4px; background: #fbbc04; color: white; font-size: 12px; font-weight: 500;">';
+            html += 'Specific Posts';
+            html += '          </div>';
+            html += '          <span style="color: #5f6368; font-size: 11px; font-style: italic;">' + postCount + ' post' + (postCount > 1 ? 's' : '') + ' only</span>';
+          }
+          html += '        </div>';
+
+          html += '      </div>';
+
+          html += '    </div>';
+
+          // Action buttons
+          html += '    <div style="display: flex; flex-direction: column; gap: 8px; min-width: 240px;">';
+
+          // Section label
+          html += '      <div style="font-size: 11px; font-weight: 600; color: #5f6368; text-transform: uppercase; letter-spacing: 0.5px;">Actions</div>';
+
+          // Access level dropdown (Permission only)
+          html += '      <select onchange="updateClientAccessLevel(\'' + ac.ID + '\', this.value)" style="padding: 6px 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px;">';
+          html += '        <option value="">Change Permission...</option>';
+          html += '        <option value="Admin"' + (ac.Access_Level === 'Admin' ? ' selected' : '') + '>Admin (approve + manage)</option>';
+          html += '        <option value="Full"' + (ac.Access_Level === 'Full' ? ' selected' : '') + '>Full (approve/reject)</option>';
+          html += '        <option value="Read_Only"' + (ac.Access_Level === 'Read_Only' ? ' selected' : '') + '>Read Only (view only)</option>';
+          html += '      </select>';
+
+          // Separator
+          html += '      <div style="border-top: 1px solid #f1f3f4; margin: 4px 0;"></div>';
+
+          // Set/Remove as client admin button (changes both permission AND post scope)
+          if (isAdmin) {
+            html += '      <button onclick="removeClientAdmin(\'' + ac.ID + '\', \'' + escapeHtml(ac.Email) + '\')" ';
+            html += '        style="padding: 6px 12px; background: white; color: #ea4335; border: 1px solid #ea4335; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">';
+            html += '        ↓ Demote from Client Admin';
+            html += '      </button>';
+            html += '      <div style="font-size: 10px; color: #5f6368; margin-top: -4px; line-height: 1.3;">Will keep Full permission but lose "All Posts" access</div>';
+          } else {
+            html += '      <button onclick="setAsClientAdmin(\'' + ac.ID + '\', \'' + escapeHtml(ac.Email) + '\')" ';
+            html += '        style="padding: 6px 12px; background: #ea4335; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">';
+            html += '        ↑ Promote to Client Admin';
+            html += '      </button>';
+            html += '      <div style="font-size: 10px; color: #5f6368; margin-top: -4px; line-height: 1.3;">Will set Admin permission + grant "All Posts" access</div>';
+          }
+
+          // Separator
+          html += '      <div style="border-top: 1px solid #f1f3f4; margin: 4px 0;"></div>';
+
+          // Revoke access button
+          html += '      <button onclick="revokeClientAccessConfirm(\'' + ac.ID + '\', \'' + escapeHtml(ac.Email) + '\')" ';
+          html += '        style="padding: 6px 12px; background: white; color: #5f6368; border: 1px solid #dadce0; border-radius: 4px; cursor: pointer; font-size: 13px;">';
+          html += '        Revoke Access';
+          html += '      </button>';
+
+          html += '    </div>';
+          html += '  </div>';
+
+          // Show access URL section
+          if (ac.Access_URL) {
+            html += '  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f3f4;">';
+            html += '    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">';
+            html += '      <div style="flex: 1;">';
+            html += '        <div style="font-size: 11px; font-weight: 600; color: #5f6368; margin-bottom: 4px;">CLIENT ACCESS URL</div>';
+            html += '        <div style="font-size: 11px; color: #5f6368; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">';
+            html += escapeHtml(ac.Access_URL.substring(0, 60)) + '...';
+            html += '        </div>';
+            html += '      </div>';
+            // Use data attribute to safely store the URL
+            html += '      <button class="copy-url-btn" data-url="' + escapeHtml(ac.Access_URL) + '" ';
+            html += '        style="padding: 6px 12px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; white-space: nowrap;">';
+            html += '        📋 Copy URL';
+            html += '      </button>';
+            html += '    </div>';
+            html += '  </div>';
+          }
+
+          // Show created info
+          if (ac.Created_Date) {
+            const createdDate = new Date(ac.Created_Date).toLocaleDateString();
+            html += '  <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f3f4; font-size: 12px; color: #5f6368;">';
+            html += '    Access granted on ' + createdDate;
+            if (ac.Created_By) {
+              html += ' by ' + escapeHtml(ac.Created_By);
+            }
+            if (ac.Last_Login) {
+              const lastLogin = new Date(ac.Last_Login).toLocaleDateString();
+              html += ' • Last login: ' + lastLogin;
+            }
+            html += '  </div>';
+          }
+
+          html += '</div>';
+        });
+
+        html += '</div>';
+
+        container.innerHTML = html;
+
+        // Add event delegation for copy URL buttons
+        setTimeout(function() {
+          const copyButtons = document.querySelectorAll('.copy-url-btn');
+          copyButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+              const url = this.getAttribute('data-url');
+              copyAccessUrl(url);
+            });
+          });
+        }, 100);
+      }
+
+      /**
+       * Update client access level
+       */
+      function updateClientAccessLevel(authorizedClientId, newAccessLevel) {
+        if (!newAccessLevel) return; // User selected placeholder
+
+        if (!confirm('Change access level to ' + newAccessLevel + '?')) {
+          loadClientAccess(); // Reset dropdown
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Access level updated successfully');
+              loadClientAccess(); // Reload list
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to update access level'));
+              loadClientAccess();
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+            loadClientAccess();
+          })
+          .updateAuthorizedClient(authorizedClientId, {accessLevel: newAccessLevel});
+      }
+
+      /**
+       * Set a client contact as admin (full access to all posts + can manage reviewers)
+       */
+      function setAsClientAdmin(authorizedClientId, email) {
+        if (!confirm('⚠️ Promote ' + email + ' to Client Admin?\n\nThey will:\n• Have full access to ALL posts for their client\n• Be able to add and remove other reviewers\n\nThis is a powerful permission!')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Client promoted to Admin successfully!\n\nThey can now manage reviewers for their organization.');
+              loadClientAccess();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to set as admin'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .setAsClientAdmin(authorizedClientId);
+      }
+
+      /**
+       * Remove client admin status (downgrade to Full access with specific posts)
+       */
+      function removeClientAdmin(authorizedClientId, email) {
+        if (!confirm('Remove Admin status from ' + email + '?\n\nThey will:\n• No longer be able to manage reviewers\n• Keep Full access to their assigned posts\n\nContinue?')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Admin status removed successfully');
+              loadClientAccess();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to remove admin status'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .updateAuthorizedClient(authorizedClientId, {accessLevel: 'Full'});
+      }
+
+      /**
+       * Copy access URL to clipboard
+       */
+      function copyAccessUrl(url) {
+        // Create temporary textarea to copy URL
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        try {
+          document.execCommand('copy');
+          alert('✅ Access URL copied to clipboard!\n\nYou can now paste and send this URL to the client.');
+        } catch (err) {
+          alert('❌ Failed to copy URL. Please copy manually:\n\n' + url);
+        }
+
+        document.body.removeChild(textarea);
+      }
+
+      /**
+       * Revoke client access with confirmation
+       */
+      function revokeClientAccessConfirm(authorizedClientId, email) {
+        if (!confirm('⚠️ Revoke access for ' + email + '?\n\nThey will no longer be able to:\n• View posts\n• Approve or reject posts\n• Access the client portal\n\nThis action can be undone by re-granting access.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              alert('✅ Access revoked successfully');
+              loadClientAccess(); // Reload to remove from list
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to revoke access'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .updateAuthorizedClient(authorizedClientId, {status: 'Inactive'});
+      }
+
+      // ========================================
+      // END ADMIN PANEL FUNCTIONS
+      // ========================================
+
       function displayPostDetail(post) {
         console.log('Displaying post:', post);
 
@@ -2266,7 +3053,11 @@
         // Always show Edit Post and Save as Template buttons (on the left)
         html += '<button class="btn btn-primary" type="button" onclick="editCurrentPost()">Edit Post</button>';
         html += ' <button class="btn btn-secondary" type="button" onclick="saveAsTemplate(\'' + post.ID + '\')">📋 Save as Template</button>';
-        html += ' <button class="btn btn-secondary" type="button" onclick="confirmDeletePost(\'' + post.ID + '\', \'' + escapeHtml(post.Post_Title || 'this post').replace(/'/g, "\\'") + '\')" style="color: #ea4335;">🗑️ Delete Post</button>';
+
+        // Only show Delete button for admins
+        if (userRole === 'Admin') {
+          html += ' <button class="btn btn-secondary" type="button" onclick="confirmDeletePost(\'' + post.ID + '\', \'' + escapeHtml(post.Post_Title || 'this post').replace(/'/g, "\\'") + '\')" style="color: #ea4335;">🗑️ Delete Post</button>';
+        }
 
         // Add status change buttons based on current status (in the middle)
         if (post.Status === 'Draft') {

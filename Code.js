@@ -97,6 +97,91 @@ function doGet(e) {
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
 
+    // Get reviewers for client admin
+    if (action === 'getClientReviewers' && token) {
+      Logger.log('✅ GET CLIENT REVIEWERS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+
+      const result = getReviewersForClient(token);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Add reviewer (client admin only)
+    if (action === 'addReviewer' && token) {
+      Logger.log('✅ ADD REVIEWER ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Email: ' + e.parameter.email);
+
+      const result = addReviewerAsClientAdmin(token, e.parameter.email);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Remove reviewer (client admin only)
+    if (action === 'removeReviewer' && token) {
+      Logger.log('✅ REMOVE REVIEWER ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Reviewer ID: ' + e.parameter.reviewerId);
+
+      const result = removeReviewerAsClientAdmin(token, e.parameter.reviewerId);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Get post reviewers (client admin only)
+    if (action === 'getPostReviewers' && token) {
+      Logger.log('✅ GET POST REVIEWERS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+
+      const result = getPostReviewersForAdmin(token, e.parameter.postId);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Update post reviewers (client admin only)
+    if (action === 'updatePostReviewers' && token) {
+      Logger.log('✅ UPDATE POST REVIEWERS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+      Logger.log('Reviewer IDs: ' + e.parameter.reviewerIds);
+
+      const result = updatePostReviewersForAdmin(token, e.parameter.postId, e.parameter.reviewerIds);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
     // Check if this is a client portal request (legacy server-side rendering)
     const page = e && e.parameter ? e.parameter.page : null;
 
@@ -587,28 +672,12 @@ function validateClientAccess(token) {
 
     Logger.log('Client found: ' + client.Client_Name);
 
-    // Get posts for this client
-    var posts = getClientPostsWithImages(authorizedClient.Client_ID);
-
-    // Filter posts based on Post_IDs if specified
-    if (authorizedClient.Post_IDs && authorizedClient.Post_IDs.trim() !== '') {
-      var allowedPostIds = authorizedClient.Post_IDs.split(',').map(function(id) {
-        return id.trim();
-      });
-      Logger.log('Filtering to specific posts: ' + allowedPostIds.join(', '));
-
-      posts = posts.filter(function(post) {
-        return allowedPostIds.indexOf(post.ID) > -1;
-      });
-
-      Logger.log('After filtering: ' + posts.length + ' posts');
-    } else {
-      Logger.log('No Post_IDs restriction - returning all client posts');
-    }
+    // Get posts for this client (with status and post ID filtering built-in)
+    var posts = getClientPostsWithImages(authorizedClient.Client_ID, authorizedClient);
 
     Logger.log('Client access validated. Returning ' + posts.length + ' posts for client: ' + client.Client_Name);
 
-    // Add email to clientInfo for display purposes
+    // Add email and access level to clientInfo for display purposes
     var clientInfoWithEmail = {};
     for (var key in client) {
       if (client.hasOwnProperty(key)) {
@@ -616,6 +685,8 @@ function validateClientAccess(token) {
       }
     }
     clientInfoWithEmail.Email = authorizedClient.Email;
+    clientInfoWithEmail.Access_Level = authorizedClient.Access_Level;
+    clientInfoWithEmail.Is_Admin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
 
     return {
       success: true,
@@ -1801,8 +1872,8 @@ function grantClientAccessForPost(postId, clientId, approverEmails) {
 
     Logger.log('Using email: ' + email);
 
-    // Grant access to this specific post only
-    return grantClientAccess(clientId, email, 'Full', postId);
+    // Grant access to this specific post only (Restricted access type)
+    return grantClientAccess(clientId, email, 'Full', postId, 'Restricted');
   } catch (e) {
     Logger.log('Error in grantClientAccessForPost: ' + e.message);
     return {success: false, error: e.message};
@@ -2360,6 +2431,347 @@ function CHECK_POSTS_STATUS_VALIDATION() {
 
   } catch (e) {
     Logger.log('❌ Error: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Get all reviewers for a client (client admin only)
+ * @param {string} token - Client access token
+ * @returns {Object} {success: true, reviewers: [...]} or {success: false, error: '...'}
+ */
+function getReviewersForClient(token) {
+  try {
+    Logger.log('Getting reviewers for token: ' + token);
+
+    // Validate token and check if user is admin
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Check if user is a client admin
+    const isAdmin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
+    if (!isAdmin) {
+      return {success: false, error: 'Only client admins can manage reviewers'};
+    }
+
+    // Get all authorized clients for this client ID
+    const reviewers = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.Client_ID === authorizedClient.Client_ID && ac.Status === 'Active';
+      },
+      sortFn: function(a, b) {
+        // Admins first, then by email
+        if (a.Access_Level === 'Admin' && b.Access_Level !== 'Admin') return -1;
+        if (a.Access_Level !== 'Admin' && b.Access_Level === 'Admin') return 1;
+        return (a.Email || '').localeCompare(b.Email || '');
+      }
+    });
+
+    // Convert dates to ISO strings
+    reviewers.forEach(function(r) {
+      if (r.Created_Date instanceof Date) r.Created_Date = r.Created_Date.toISOString();
+      if (r.Last_Login instanceof Date) r.Last_Login = r.Last_Login.toISOString();
+      if (r.Token_Expires instanceof Date) r.Token_Expires = r.Token_Expires.toISOString();
+    });
+
+    Logger.log('Found ' + reviewers.length + ' reviewers');
+    return {success: true, reviewers: reviewers};
+
+  } catch (e) {
+    Logger.log('Error getting reviewers: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Add a new reviewer (client admin only)
+ * @param {string} token - Client access token
+ * @param {string} email - Email of reviewer to add
+ * @returns {Object} {success: true, message: '...'} or {success: false, error: '...'}
+ */
+function addReviewerAsClientAdmin(token, email) {
+  try {
+    Logger.log('Adding reviewer: ' + email);
+
+    // Validate token and check if user is admin
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Check if user is a client admin
+    const isAdmin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
+    if (!isAdmin) {
+      return {success: false, error: 'Only client admins can add reviewers'};
+    }
+
+    // Validate email
+    if (!email || !email.trim()) {
+      return {success: false, error: 'Email is required'};
+    }
+
+    email = email.trim();
+
+    // Check if email already has access
+    const existing = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.Client_ID === authorizedClient.Client_ID &&
+               ac.Email === email &&
+               ac.Status === 'Active';
+      }
+    });
+
+    if (existing.length > 0) {
+      return {success: false, error: 'This person already has access'};
+    }
+
+    // Grant access with Full permission level (reviewers can approve/reject)
+    // But Restricted access type (only see posts they're assigned to)
+    const result = grantClientAccess(
+      authorizedClient.Client_ID,
+      email,
+      'Full',        // Full permission level (can approve/reject)
+      '',            // Empty Post_IDs initially (will be populated when assigned)
+      'Restricted'   // Restricted access type = only sees posts in Post_IDs
+    );
+
+    if (result.success) {
+      Logger.log('✅ Reviewer added successfully');
+      return {success: true, message: 'Reviewer added successfully'};
+    } else {
+      return result;
+    }
+
+  } catch (e) {
+    Logger.log('Error adding reviewer: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Remove a reviewer (client admin only)
+ * @param {string} token - Client access token
+ * @param {string} reviewerId - ID of authorized client to remove
+ * @returns {Object} {success: true, message: '...'} or {success: false, error: '...'}
+ */
+function removeReviewerAsClientAdmin(token, reviewerId) {
+  try {
+    Logger.log('Removing reviewer: ' + reviewerId);
+
+    // Validate token and check if user is admin
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Check if user is a client admin
+    const isAdmin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
+    if (!isAdmin) {
+      return {success: false, error: 'Only client admins can remove reviewers'};
+    }
+
+    // Get the reviewer to be removed
+    const reviewerToRemove = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.ID === reviewerId;
+      }
+    });
+
+    if (reviewerToRemove.length === 0) {
+      return {success: false, error: 'Reviewer not found'};
+    }
+
+    const reviewer = reviewerToRemove[0];
+
+    // Security check: Ensure reviewer belongs to same client
+    if (reviewer.Client_ID !== authorizedClient.Client_ID) {
+      return {success: false, error: 'Cannot remove reviewers from other clients'};
+    }
+
+    // Prevent removing other admins
+    if (reviewer.Access_Level === 'Admin') {
+      return {success: false, error: 'Cannot remove client admins'};
+    }
+
+    // Prevent removing yourself
+    if (reviewer.Email === authorizedClient.Email) {
+      return {success: false, error: 'Cannot remove yourself'};
+    }
+
+    // Revoke access
+    const result = revokeClientAccess(reviewerId);
+
+    if (result.success) {
+      Logger.log('✅ Reviewer removed successfully');
+      return {success: true, message: 'Reviewer removed successfully'};
+    } else {
+      return result;
+    }
+
+  } catch (e) {
+    Logger.log('Error removing reviewer: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Get reviewers and current assignments for a post (client admin only)
+ * @param {string} token - Client access token
+ * @param {string} postId - Post ID
+ * @returns {Object} {success: true, reviewers: [...], currentAssignments: [...]} or error
+ */
+function getPostReviewersForAdmin(token, postId) {
+  try {
+    Logger.log('Getting post reviewers for post: ' + postId);
+
+    // Validate token and check if user is admin
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Check if user is a client admin
+    const isAdmin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
+    if (!isAdmin) {
+      return {success: false, error: 'Only client admins can manage post assignments'};
+    }
+
+    // Get all reviewers for this client
+    const reviewers = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.Client_ID === authorizedClient.Client_ID && ac.Status === 'Active';
+      }
+    });
+
+    // Convert dates
+    reviewers.forEach(function(r) {
+      if (r.Created_Date instanceof Date) r.Created_Date = r.Created_Date.toISOString();
+      if (r.Last_Login instanceof Date) r.Last_Login = r.Last_Login.toISOString();
+      if (r.Token_Expires instanceof Date) r.Token_Expires = r.Token_Expires.toISOString();
+    });
+
+    // Find which reviewers are currently assigned to this post
+    const currentAssignments = [];
+    reviewers.forEach(function(reviewer) {
+      // Admin always has access (Post_IDs is empty)
+      if (reviewer.Access_Level === 'Admin' && (!reviewer.Post_IDs || reviewer.Post_IDs === '')) {
+        return; // Skip - admins always see everything
+      }
+
+      // Check if this post is in their Post_IDs
+      if (reviewer.Post_IDs && reviewer.Post_IDs.trim() !== '') {
+        const postIds = reviewer.Post_IDs.split(',').map(function(id) { return id.trim(); });
+        if (postIds.indexOf(postId) > -1) {
+          currentAssignments.push(reviewer.ID);
+        }
+      }
+    });
+
+    Logger.log('Found ' + reviewers.length + ' reviewers, ' + currentAssignments.length + ' currently assigned');
+    return {
+      success: true,
+      reviewers: reviewers,
+      currentAssignments: currentAssignments
+    };
+
+  } catch (e) {
+    Logger.log('Error getting post reviewers: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Update post reviewer assignments (client admin only)
+ * @param {string} token - Client access token
+ * @param {string} postId - Post ID
+ * @param {string} reviewerIds - Comma-separated reviewer IDs
+ * @returns {Object} {success: true} or error
+ */
+function updatePostReviewersForAdmin(token, postId, reviewerIds) {
+  try {
+    Logger.log('Updating post reviewers for post: ' + postId);
+    Logger.log('Selected reviewer IDs: ' + reviewerIds);
+
+    // Validate token and check if user is admin
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Check if user is a client admin
+    const isAdmin = authorizedClient.Access_Level === 'Admin' && (!authorizedClient.Post_IDs || authorizedClient.Post_IDs === '');
+    if (!isAdmin) {
+      return {success: false, error: 'Only client admins can manage post assignments'};
+    }
+
+    // Parse selected reviewer IDs
+    const selectedIds = reviewerIds ? reviewerIds.split(',').map(function(id) { return id.trim(); }).filter(Boolean) : [];
+    Logger.log('Parsed selected IDs: ' + selectedIds.join(', '));
+
+    // Get all reviewers for this client (excluding admins - they always have access)
+    const reviewers = _readSheetAsObjects_('Authorized_Clients', {
+      filterFn: function(ac) {
+        return ac.Client_ID === authorizedClient.Client_ID &&
+               ac.Status === 'Active' &&
+               ac.Access_Level !== 'Admin';
+      }
+    });
+
+    // Update each reviewer's Post_IDs
+    const sheet = _getSheet_('Authorized_Clients');
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIndex = headers.indexOf('ID');
+    const postIdsIndex = headers.indexOf('Post_IDs');
+
+    reviewers.forEach(function(reviewer) {
+      // IMPORTANT: Only modify Post_IDs for Restricted access users
+      // Full access users see all posts regardless of Post_IDs (it's metadata only)
+      const accessType = reviewer.Access_Type || 'Full';
+      if (accessType === 'Full') {
+        Logger.log(reviewer.Email + ' has Full access - assignment is metadata only, not modifying Post_IDs');
+        return; // Skip - don't modify Post_IDs for Full access users
+      }
+
+      const isSelected = selectedIds.indexOf(reviewer.ID) > -1;
+
+      // Find row in sheet (only for Restricted access users)
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][idIndex] === reviewer.ID) {
+          // Get current Post_IDs
+          const currentPostIds = data[i][postIdsIndex] || '';
+          let postIdArray = currentPostIds ? currentPostIds.split(',').map(function(id) { return id.trim(); }).filter(Boolean) : [];
+
+          if (isSelected) {
+            // Add this post if not already there
+            if (postIdArray.indexOf(postId) === -1) {
+              postIdArray.push(postId);
+              Logger.log('Adding ' + postId + ' to ' + reviewer.Email + ' (Restricted access)');
+            }
+          } else {
+            // Remove this post if it's there
+            const index = postIdArray.indexOf(postId);
+            if (index > -1) {
+              postIdArray.splice(index, 1);
+              Logger.log('Removing ' + postId + ' from ' + reviewer.Email + ' (Restricted access)');
+            }
+          }
+
+          // Update sheet
+          const newPostIds = postIdArray.join(', ');
+          sheet.getRange(i + 1, postIdsIndex + 1).setValue(newPostIds);
+          break;
+        }
+      }
+    });
+
+    Logger.log('✅ Post reviewers updated successfully');
+    return {success: true, message: 'Post reviewers updated successfully'};
+
+  } catch (e) {
+    Logger.log('Error updating post reviewers: ' + e.message);
     return {success: false, error: e.message};
   }
 }

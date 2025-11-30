@@ -73,8 +73,18 @@ function getAllUsers() {
     var users = _readSheetAsObjects_('Users', {
       filterFn: function(u){ return String(u.Status || '').trim() === 'Active'; }
     });
+
+    // Convert Date objects to ISO strings for web app compatibility
+    users = users.map(function(user) {
+      if (user.Created_Date instanceof Date) {
+        user.Created_Date = user.Created_Date.toISOString();
+      }
+      return user;
+    });
+
     return users;
   } catch (e) {
+    Logger.log('Error in getAllUsers: ' + e.message);
     return _err_(e, 'getAllUsers');
   }
 }
@@ -448,8 +458,11 @@ function getAllPostsWithImages() {
       if (mediaUrl) {
         var extractedUrl = extractUrlFromImageFormula(mediaUrl);
         if (extractedUrl) {
-          // Strict carousel detection - must exactly match "Carousel" (case-insensitive)
-          var isCarousel = String(mediaType).trim().toLowerCase() === 'carousel';
+          // Carousel detection: Check both Media_Type field AND URL pattern
+          // Box.com folder URLs contain "/folder/" in the path (these are carousels)
+          var mediaTypeIsCarousel = String(mediaType).trim().toLowerCase() === 'carousel';
+          var urlIsFolder = String(extractedUrl).toLowerCase().indexOf('/folder/') > -1;
+          var isCarousel = mediaTypeIsCarousel || urlIsFolder;
 
           imageMap[postId] = {
             url: extractedUrl,
@@ -1348,6 +1361,15 @@ function deletePost(postId) {
     if (!postId) {
       return {success: false, error: 'Post ID is required'};
     }
+
+    // Permission check: Only admins can delete posts
+    var currentUser = Session.getActiveUser().getEmail();
+    if (!isAdmin(currentUser)) {
+      Logger.log('❌ Permission denied: ' + currentUser + ' is not an admin');
+      return {success: false, error: 'Permission denied: Only administrators can delete posts'};
+    }
+
+    Logger.log('✅ Permission granted for ' + currentUser);
 
     // 1. Delete from Posts sheet
     var postsSheet = _getSheet_('Posts');
