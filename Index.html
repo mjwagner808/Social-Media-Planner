@@ -1104,6 +1104,9 @@
           <button class="btn btn-secondary" onclick="refreshCalendarData()" title="Refresh calendar data">
             🔄 Refresh
           </button>
+          <button class="btn btn-secondary" onclick="showKeyboardShortcutsHelp()" title="Keyboard shortcuts (Press ?)">
+            ⌨️ Shortcuts
+          </button>
         </div>
 
         <div class="filters">
@@ -1663,7 +1666,132 @@
 
         loadCalendarData();
         loadApprovalCount();
+
+        // Setup keyboard shortcuts
+        setupKeyboardShortcuts();
       };
+
+      // Keyboard shortcuts setup
+      function setupKeyboardShortcuts() {
+        document.addEventListener('keydown', function(e) {
+          // Don't trigger shortcuts when typing in inputs
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+            return;
+          }
+
+          // Get key pressed
+          const key = e.key.toLowerCase();
+
+          switch(key) {
+            case 'n':
+              // N = New Post
+              e.preventDefault();
+              openPostCreationForm();
+              break;
+
+            case 'r':
+              // R = Refresh calendar
+              e.preventDefault();
+              refreshCalendarData();
+              break;
+
+            case 'escape':
+              // Esc = Close modals
+              e.preventDefault();
+              closeAllModals();
+              break;
+
+            case 'arrowleft':
+              // Left arrow = Previous month
+              e.preventDefault();
+              navigateMonth(-1);
+              break;
+
+            case 'arrowright':
+              // Right arrow = Next month
+              e.preventDefault();
+              navigateMonth(1);
+              break;
+
+            case '?':
+              // ? = Show keyboard shortcuts help
+              e.preventDefault();
+              showKeyboardShortcutsHelp();
+              break;
+          }
+        });
+
+        console.log('Keyboard shortcuts enabled');
+      }
+
+      // Close all open modals
+      function closeAllModals() {
+        closePostCreationForm();
+        closePostDetail();
+        closeTemplateManager();
+        closeAdminPanel();
+      }
+
+      // Show keyboard shortcuts help modal
+      function showKeyboardShortcutsHelp() {
+        const helpContent = `
+          <div style="padding: 20px;">
+            <h3 style="margin-top: 0; color: #1a73e8;">⌨️ Keyboard Shortcuts</h3>
+            <div style="display: grid; gap: 12px; margin-top: 20px;">
+              <div style="display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                <span><strong>N</strong></span>
+                <span style="color: #5f6368;">Create New Post</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                <span><strong>R</strong></span>
+                <span style="color: #5f6368;">Refresh Calendar</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                <span><strong>Esc</strong></span>
+                <span style="color: #5f6368;">Close Modals</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                <span><strong>← →</strong></span>
+                <span style="color: #5f6368;">Navigate Months</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; padding: 8px; background: #f8f9fa; border-radius: 4px;">
+                <span><strong>?</strong></span>
+                <span style="color: #5f6368;">Show This Help</span>
+              </div>
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+              <button class="btn btn-primary" onclick="closeKeyboardShortcutsHelp()">Got it!</button>
+            </div>
+          </div>
+        `;
+
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.id = 'keyboardShortcutsModal';
+        modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100001; display: flex; align-items: center; justify-content: center;';
+
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = 'background: white; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.2);';
+        modalContent.innerHTML = helpContent;
+
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+
+        // Close on background click
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            closeKeyboardShortcutsHelp();
+          }
+        });
+      }
+
+      // Close keyboard shortcuts help
+      function closeKeyboardShortcutsHelp() {
+        const modal = document.getElementById('keyboardShortcutsModal');
+        if (modal) {
+          modal.remove();
+        }
+      }
 
       // Show message when in preview mode
       function showPreviewMessage() {
