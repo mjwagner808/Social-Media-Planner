@@ -544,7 +544,190 @@
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
       }
-      
+
+      /* Skeleton Screens */
+      .skeleton {
+        background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s ease-in-out infinite;
+        border-radius: 4px;
+      }
+
+      @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+
+      .skeleton-calendar {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      .skeleton-calendar table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .skeleton-calendar th {
+        padding: 12px;
+        text-align: center;
+        font-weight: 600;
+        color: #5f6368;
+        border-bottom: 2px solid #e8eaed;
+      }
+
+      .skeleton-calendar td {
+        height: 120px;
+        width: 14.28%;
+        padding: 8px;
+        border: 1px solid #e8eaed;
+        vertical-align: top;
+      }
+
+      .skeleton-day-number {
+        width: 24px;
+        height: 20px;
+        margin-bottom: 8px;
+      }
+
+      .skeleton-post {
+        height: 16px;
+        margin-bottom: 6px;
+        width: 100%;
+      }
+
+      /* Skeleton - Post Detail */
+      .skeleton-post-detail {
+        padding: 20px;
+      }
+
+      .skeleton-post-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 24px;
+      }
+
+      .skeleton-post-title {
+        height: 32px;
+        width: 60%;
+        margin-bottom: 8px;
+      }
+
+      .skeleton-post-meta {
+        height: 16px;
+        width: 40%;
+        margin-bottom: 4px;
+      }
+
+      .skeleton-post-status {
+        height: 28px;
+        width: 100px;
+      }
+
+      .skeleton-post-section {
+        margin-bottom: 24px;
+      }
+
+      .skeleton-post-section-title {
+        height: 20px;
+        width: 120px;
+        margin-bottom: 12px;
+      }
+
+      .skeleton-post-content {
+        height: 80px;
+        width: 100%;
+        margin-bottom: 12px;
+      }
+
+      .skeleton-platform-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .skeleton-platform-tab {
+        height: 36px;
+        width: 80px;
+      }
+
+      .skeleton-platform-image {
+        height: 200px;
+        width: 100%;
+        margin-bottom: 12px;
+      }
+
+      .skeleton-comment {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .skeleton-comment-avatar {
+        height: 40px;
+        width: 40px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .skeleton-comment-content {
+        flex: 1;
+      }
+
+      .skeleton-comment-name {
+        height: 16px;
+        width: 120px;
+        margin-bottom: 8px;
+      }
+
+      .skeleton-comment-text {
+        height: 48px;
+        width: 100%;
+      }
+
+      /* Skeleton - Form Loading */
+      .skeleton-form {
+        padding: 20px;
+      }
+
+      .skeleton-form-group {
+        margin-bottom: 20px;
+      }
+
+      .skeleton-form-label {
+        height: 16px;
+        width: 120px;
+        margin-bottom: 8px;
+      }
+
+      .skeleton-form-input {
+        height: 40px;
+        width: 100%;
+      }
+
+      .skeleton-form-textarea {
+        height: 120px;
+        width: 100%;
+      }
+
+      .skeleton-form-select {
+        height: 40px;
+        width: 100%;
+      }
+
+      .skeleton-form-checkboxes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 8px;
+      }
+
+      .skeleton-form-checkbox {
+        height: 20px;
+        width: 80px;
+      }
+
       /* Responsive */
       @media (max-width: 768px) {
         .calendar td {
@@ -950,8 +1133,53 @@
         
         <!-- Loading State -->
         <div class="loading active" id="loading">
-          <div class="spinner"></div>
-          <p>Loading your content calendar...</p>
+          <div class="skeleton-calendar">
+            <table>
+              <thead>
+                <tr>
+                  <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div><div class="skeleton skeleton-post"></div></td>
+                </tr>
+                <tr>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                </tr>
+                <tr>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                </tr>
+                <tr>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div></td>
+                  <td><div class="skeleton skeleton-day-number"></div><div class="skeleton skeleton-post"></div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         
         <!-- Calendar -->
@@ -1188,8 +1416,48 @@
 
         <div class="modal-body" id="postDetailBody">
           <!-- Content loaded dynamically -->
-          <div style="text-align: center; padding: 40px;">
-            <p>Loading post details...</p>
+          <div class="skeleton-post-detail">
+            <div class="skeleton-post-header">
+              <div style="flex: 1;">
+                <div class="skeleton skeleton-post-title"></div>
+                <div class="skeleton skeleton-post-meta"></div>
+                <div class="skeleton skeleton-post-meta" style="width: 30%;"></div>
+              </div>
+              <div class="skeleton skeleton-post-status"></div>
+            </div>
+
+            <div class="skeleton-post-section">
+              <div class="skeleton skeleton-post-section-title"></div>
+              <div class="skeleton skeleton-post-content"></div>
+            </div>
+
+            <div class="skeleton-post-section">
+              <div class="skeleton skeleton-post-section-title"></div>
+              <div class="skeleton-platform-tabs">
+                <div class="skeleton skeleton-platform-tab"></div>
+                <div class="skeleton skeleton-platform-tab"></div>
+                <div class="skeleton skeleton-platform-tab"></div>
+              </div>
+              <div class="skeleton skeleton-platform-image"></div>
+            </div>
+
+            <div class="skeleton-post-section">
+              <div class="skeleton skeleton-post-section-title"></div>
+              <div class="skeleton-comment">
+                <div class="skeleton skeleton-comment-avatar"></div>
+                <div class="skeleton-comment-content">
+                  <div class="skeleton skeleton-comment-name"></div>
+                  <div class="skeleton skeleton-comment-text"></div>
+                </div>
+              </div>
+              <div class="skeleton-comment">
+                <div class="skeleton skeleton-comment-avatar"></div>
+                <div class="skeleton-comment-content">
+                  <div class="skeleton skeleton-comment-name"></div>
+                  <div class="skeleton skeleton-comment-text"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -3647,6 +3915,9 @@
       }
 
       function loadFormOptions() {
+        // Show loading skeleton
+        showFormLoadingSkeleton();
+
         google.script.run
           .withSuccessHandler(function(options) {
             if (options.success === false) {
@@ -3656,11 +3927,56 @@
 
             formOptions = options;
             populateFormDropdowns();
+            hideFormLoadingSkeleton();
           })
           .withFailureHandler(function(error) {
             showFormError('Error loading form: ' + error.message);
+            hideFormLoadingSkeleton();
           })
           .getFormOptions();
+      }
+
+      function showFormLoadingSkeleton() {
+        // Disable form inputs and show skeleton placeholders
+        const clientSelect = document.getElementById('postClient');
+        const platformsContainer = document.getElementById('platformsContainer');
+        const categorySelect = document.getElementById('contentCategory');
+
+        if (clientSelect) {
+          clientSelect.disabled = true;
+          clientSelect.style.opacity = '0.5';
+        }
+
+        if (platformsContainer) {
+          platformsContainer.innerHTML = '<div class="skeleton-form-checkboxes">' +
+            '<div class="skeleton skeleton-form-checkbox"></div>' +
+            '<div class="skeleton skeleton-form-checkbox"></div>' +
+            '<div class="skeleton skeleton-form-checkbox"></div>' +
+            '<div class="skeleton skeleton-form-checkbox"></div>' +
+            '<div class="skeleton skeleton-form-checkbox"></div>' +
+            '</div>';
+        }
+
+        if (categorySelect) {
+          categorySelect.disabled = true;
+          categorySelect.style.opacity = '0.5';
+        }
+      }
+
+      function hideFormLoadingSkeleton() {
+        // Re-enable form inputs
+        const clientSelect = document.getElementById('postClient');
+        const categorySelect = document.getElementById('contentCategory');
+
+        if (clientSelect) {
+          clientSelect.disabled = false;
+          clientSelect.style.opacity = '1';
+        }
+
+        if (categorySelect) {
+          categorySelect.disabled = false;
+          categorySelect.style.opacity = '1';
+        }
       }
 
       function populateFormDropdowns() {
