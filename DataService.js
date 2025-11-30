@@ -351,6 +351,71 @@ function updatePostStatus(postId, newStatus) {
   };
 }
 
+/**
+ * Mark a post as Published and record the published date
+ * @param {string} postId - The post ID
+ * @returns {Object} Success/error result
+ */
+function markPostAsPublished(postId) {
+  try {
+    Logger.log('Marking post as Published: ' + postId);
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var postsSheet = ss.getSheetByName('Posts');
+    var data = postsSheet.getDataRange().getValues();
+    var headers = data[0];
+
+    var statusIndex = headers.indexOf('Status');
+    var publishedDateIndex = headers.indexOf('Published_Date');
+    var modifiedByIndex = headers.indexOf('Modified_By');
+    var modifiedDateIndex = headers.indexOf('Modified_Date');
+    var idIndex = headers.indexOf('ID');
+
+    if (statusIndex === -1) {
+      return {success: false, error: 'Status column not found'};
+    }
+
+    // Find the post
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === postId) {
+        // Update status to Published
+        postsSheet.getRange(i + 1, statusIndex + 1).setValue('Published');
+
+        // Set Published_Date to today
+        if (publishedDateIndex !== -1) {
+          postsSheet.getRange(i + 1, publishedDateIndex + 1).setValue(new Date());
+        }
+
+        // Update Modified fields
+        var currentUser = Session.getActiveUser().getEmail();
+        if (modifiedByIndex !== -1) {
+          postsSheet.getRange(i + 1, modifiedByIndex + 1).setValue(currentUser);
+        }
+        if (modifiedDateIndex !== -1) {
+          postsSheet.getRange(i + 1, modifiedDateIndex + 1).setValue(new Date());
+        }
+
+        Logger.log('✅ Post marked as Published with date: ' + new Date());
+
+        // Also update related sheets using existing updatePostStatus
+        updatePostStatus(postId, 'Published');
+
+        return {
+          success: true,
+          message: 'Post marked as Published',
+          publishedDate: new Date().toISOString()
+        };
+      }
+    }
+
+    return {success: false, error: 'Post not found: ' + postId};
+
+  } catch (e) {
+    Logger.log('ERROR marking post as published: ' + e.message);
+    return _err_(e, 'markPostAsPublished');
+  }
+}
+
 // --------- CONTENT CATEGORIES (reference) ---------
 
 function getAllContentCategories() {
@@ -1076,6 +1141,10 @@ function createPostFromUI(postData) {
         case 'Client_Approvers':
           rowData.push(postData.clientApprovers || '');
           break;
+        case 'Published_Date':
+          // Only set if post is being marked as Published
+          rowData.push(postData.status === 'Published' && postData.publishedDate ? new Date(postData.publishedDate) : '');
+          break;
         default:
           rowData.push('');
       }
@@ -1226,6 +1295,14 @@ function updatePostFromUI(postId, postData) {
           break;
         case 'Client_Approvers':
           cellValue = postData.clientApprovers || '';
+          break;
+        case 'Published_Date':
+          // Only set if post is being marked as Published
+          if (postData.status === 'Published' && postData.publishedDate) {
+            cellValue = new Date(postData.publishedDate);
+          } else {
+            continue; // Keep existing value
+          }
           break;
         default:
           // Keep existing value for unknown columns

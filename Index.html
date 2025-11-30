@@ -3131,6 +3131,12 @@
         html += '<div class="detail-section">';
         html += '<h4>Scheduling</h4>';
         html += `<p><strong>Scheduled Date:</strong> ${scheduledDate} ${scheduledTime}</p>`;
+
+        // Show Published Date if post is published
+        if (post.Status === 'Published' && post.Published_Date) {
+          const publishedDate = new Date(post.Published_Date).toLocaleString();
+          html += `<p><strong>📅 Published Date:</strong> <span style="color: #9334e9; font-weight: 500;">${publishedDate}</span></p>`;
+        }
         html += '</div>';
 
         // Platforms & Media
@@ -3394,7 +3400,9 @@
           html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
           html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
         } else if (post.Status === 'Approved') {
-          html += ' <button class="btn btn-primary" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Scheduled\')">Schedule</button>';
+          html += ' <button class="btn btn-primary" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Scheduled\')">📅 Schedule</button>';
+        } else if (post.Status === 'Scheduled') {
+          html += ' <button class="btn btn-success" type="button" onclick="markAsPublished(\'' + post.ID + '\')" style="background: #9334e9; border-color: #9334e9;">✅ Mark as Published</button>';
         }
 
         // Close button always on the right
@@ -3424,6 +3432,31 @@
             alert('Error: ' + error.message);
           })
           .updatePostStatus(postId, newStatus);
+      }
+
+      function markAsPublished(postId) {
+        if (!confirm('Mark this post as Published? This will record today\'s date as the published date.')) {
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              const publishedDate = new Date(result.publishedDate).toLocaleString();
+              alert('✅ Post marked as Published!\n📅 Published Date: ' + publishedDate);
+              // Refresh the post detail view
+              openPostDetail(postId);
+              // Invalidate cache and refresh the calendar
+              invalidateCalendarCache();
+              loadCalendarData();
+            } else {
+              alert('❌ Error: ' + (result.error || 'Failed to mark as published'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('❌ Error: ' + error.message);
+          })
+          .markPostAsPublished(postId);
       }
 
       function editPost(postId) {
