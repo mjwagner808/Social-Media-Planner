@@ -29,19 +29,23 @@ Added comprehensive Analytics Dashboard to provide insights into posting pattern
 1. **Total Posts Count**
 2. **Posts by Status** - Distribution across Draft, Internal Review, Client Review, Approved, Scheduled, Published
 3. **Posts by Client** - Post count per client with percentages
-4. **Posts by Month** - Monthly distribution for trend analysis
-5. **Approval Metrics:**
+4. **Posts by Subsidiary** - Post count per subsidiary with percentages
+5. **Posts by Content Category** - Post count per category with percentages
+6. **Posts by Month** - Monthly distribution for trend analysis
+7. **Approval Metrics:**
    - Total approvals, approved count, pending count, rejected count
    - Approval rate percentage
    - Average approval time in days
-6. **Publishing Metrics:**
+8. **Publishing Metrics:**
    - Scheduled posts, published posts, draft posts, in-review posts
    - On-time publishing rate (within 1 day of scheduled date)
-7. **Top Performers** - Top 5 content creators by post count
+9. **Top Performers** - Top 5 content creators by post count
 
 **Helper Functions:**
 - `calculatePostsByStatus(posts)` - Status distribution
 - `calculatePostsByClient(posts, clients)` - Client distribution
+- `calculatePostsBySubsidiary(posts, clients)` - Subsidiary distribution
+- `calculatePostsByCategory(posts)` - Category distribution
 - `calculatePostsByMonth(posts)` - Monthly trends
 - `calculateApprovalMetrics(approvals, posts)` - Approval stats
 - `calculatePublishingMetrics(posts)` - Publishing performance
@@ -74,26 +78,35 @@ Added comprehensive Analytics Dashboard to provide insights into posting pattern
 **`closeAnalyticsDashboard()`** (lines 3641-3644)
 - Closes analytics modal
 
-**`renderAnalytics(metrics)`** (lines 3646-3819)
+**`renderAnalytics(metrics)`** (lines 3646-3880)
 - Renders all analytics sections:
   - **Summary Cards Row** (4 cards):
     - Total Posts (blue accent)
     - Published Posts (purple accent)
     - Approval Rate (green accent)
     - On-Time Publishing Rate (orange accent)
-  - **Posts by Status** (left column):
-    - Horizontal bar charts with status colors
-    - Count and percentage for each status
-  - **Posts by Client** (right column):
-    - Top 8 clients with horizontal bars
-    - Count and percentage for each client
-    - Shows "+ X more clients" if > 8 clients
-  - **Approval Metrics** (bottom left):
-    - Total, approved, pending, rejected counts
-    - Average approval time in days
-  - **Top Performers** (bottom right):
-    - Top 5 content creators with medals (🥇🥈🥉🏅)
-    - Name, email, post count
+  - **Row 2 - Posts by Status & Client:**
+    - **Posts by Status** (left column):
+      - Horizontal bar charts with status colors
+      - Count and percentage for each status
+    - **Posts by Client** (right column):
+      - Top 8 clients with horizontal bars
+      - Count and percentage for each client
+      - Shows "+ X more clients" if > 8 clients
+  - **Row 3 - Approval Metrics & Top Performers:**
+    - **Approval Metrics** (left):
+      - Total, approved, pending, rejected counts
+      - Average approval time in days
+    - **Top Performers** (right):
+      - Top 5 content creators with medals (🥇🥈🥉🏅)
+      - Name, email, post count
+  - **Row 4 - Subsidiary & Category Distribution:**
+    - **Posts by Subsidiary** (left):
+      - All subsidiaries with horizontal purple bars (#7c3aed)
+      - Count and percentage for each subsidiary
+    - **Posts by Content Category** (right):
+      - All categories with horizontal green bars (#059669)
+      - Count and percentage for each category
 
 ---
 
@@ -127,6 +140,13 @@ Added comprehensive Analytics Dashboard to provide insights into posting pattern
 │  │ Avg Time: # days     │  │ 🏅 Alice Lee      4  │       │
 │  └──────────────────────┘  └──────────────────────┘       │
 │                                                             │
+│  ┌──────────────────────┐  ┌──────────────────────┐       │
+│  │ Posts by Subsidiary  │  │ Posts by Category    │       │
+│  │ ▓▓▓▓▓▓░░░ Sub A (8%) │  │ ▓▓▓▓▓▓▓░░ News (15%) │       │
+│  │ ▓▓▓▓░░░░░ Sub B (5%) │  │ ▓▓▓▓▓░░░░ Event (12%)│       │
+│  │ ▓▓░░░░░░░ Sub C (3%) │  │ ▓▓▓░░░░░░ Promo (8%) │       │
+│  └──────────────────────┘  └──────────────────────┘       │
+│                                                             │
 ├─────────────────────────────────────────────────────────────┤
 │                                      [Close]                │
 └─────────────────────────────────────────────────────────────┘
@@ -149,6 +169,8 @@ Added comprehensive Analytics Dashboard to provide insights into posting pattern
 - Published: Purple (#9334e9)
 
 **Client Bars:** Blue (#1a73e8)
+**Subsidiary Bars:** Purple (#7c3aed)
+**Category Bars:** Green (#059669)
 
 ---
 
