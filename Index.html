@@ -1098,8 +1098,8 @@
           <button class="btn btn-secondary" onclick="openAdminPanel()">
             👥 Admin
           </button>
-          <button class="btn btn-secondary" onclick="alert('Strategy dashboard coming in next phase!')">
-            📊 Strategy
+          <button class="btn btn-secondary" onclick="openAnalyticsDashboard()">
+            📊 Analytics
           </button>
           <button class="btn btn-secondary" onclick="refreshCalendarData()" title="Refresh calendar data">
             🔄 Refresh
@@ -1597,6 +1597,27 @@
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" onclick="closeAddUserForm()">Cancel</button>
           <button class="btn btn-primary" type="button" id="addUserSubmitBtn" onclick="submitAddUser()">Add User</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics Dashboard Modal -->
+    <div class="modal-overlay" id="analyticsDashboardModal">
+      <div class="modal-content" style="max-width: 1200px;">
+        <div class="modal-header">
+          <h2>📊 Analytics Dashboard</h2>
+          <button class="modal-close" onclick="closeAnalyticsDashboard()">&times;</button>
+        </div>
+
+        <div class="modal-body" id="analyticsContent">
+          <div style="text-align: center; padding: 60px 20px; color: #9aa0a6;">
+            <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #1a73e8; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="margin-top: 24px;">Loading analytics...</p>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" type="button" onclick="closeAnalyticsDashboard()">Close</button>
         </div>
       </div>
     </div>
@@ -3585,6 +3606,216 @@
             alert('❌ Error: ' + error.message);
           })
           .markPostAsPublished(postId);
+      }
+
+      // Analytics Dashboard Functions
+      function openAnalyticsDashboard() {
+        const modal = document.getElementById('analyticsDashboardModal');
+        modal.classList.add('active');
+
+        // Load analytics data
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result.success) {
+              renderAnalytics(result.metrics);
+            } else {
+              document.getElementById('analyticsContent').innerHTML = `
+                <div style="text-align: center; padding: 60px 20px; color: #ea4335;">
+                  <p style="font-size: 18px; margin-bottom: 12px;">❌ Error loading analytics</p>
+                  <p style="color: #5f6368;">${result.error || 'Unknown error'}</p>
+                </div>
+              `;
+            }
+          })
+          .withFailureHandler(function(error) {
+            document.getElementById('analyticsContent').innerHTML = `
+              <div style="text-align: center; padding: 60px 20px; color: #ea4335;">
+                <p style="font-size: 18px; margin-bottom: 12px;">❌ Error loading analytics</p>
+                <p style="color: #5f6368;">${error.message}</p>
+              </div>
+            `;
+          })
+          .getAnalyticsData();
+      }
+
+      function closeAnalyticsDashboard() {
+        const modal = document.getElementById('analyticsDashboardModal');
+        modal.classList.remove('active');
+      }
+
+      function renderAnalytics(metrics) {
+        const content = document.getElementById('analyticsContent');
+
+        let html = '<div style="padding: 0;">';
+
+        // Summary Cards Row
+        html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">';
+
+        // Total Posts Card
+        html += `
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #1a73e8;">
+            <div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Posts</div>
+            <div style="font-size: 32px; font-weight: 500; color: #202124;">${metrics.totalPosts}</div>
+          </div>
+        `;
+
+        // Published Posts Card
+        html += `
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #9334e9;">
+            <div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Published</div>
+            <div style="font-size: 32px; font-weight: 500; color: #202124;">${metrics.publishingMetrics.published}</div>
+          </div>
+        `;
+
+        // Approval Rate Card
+        html += `
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #34a853;">
+            <div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Approval Rate</div>
+            <div style="font-size: 32px; font-weight: 500; color: #202124;">${metrics.approvalMetrics.approvalRate}%</div>
+          </div>
+        `;
+
+        // On-Time Publishing Card
+        html += `
+          <div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #f9ab00;">
+            <div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">On-Time Rate</div>
+            <div style="font-size: 32px; font-weight: 500; color: #202124;">${metrics.publishingMetrics.onTimeRate}%</div>
+          </div>
+        `;
+
+        html += '</div>';
+
+        // Two Column Layout for Details
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">';
+
+        // Posts by Status
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Status</h3>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        const statusColors = {
+          Draft: '#9aa0a6',
+          Internal_Review: '#f9ab00',
+          Client_Review: '#ea4335',
+          Approved: '#34a853',
+          Scheduled: '#1a73e8',
+          Published: '#9334e9'
+        };
+
+        for (let status in metrics.postsByStatus) {
+          const count = metrics.postsByStatus[status];
+          const percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(0) : 0;
+          const color = statusColors[status] || '#9aa0a6';
+          const displayName = status.replace(/_/g, ' ');
+
+          html += `
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="min-width: 140px; font-size: 14px; color: #5f6368;">${displayName}</div>
+              <div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;">
+                <div style="height: 100%; background: ${color}; width: ${percentage}%; transition: width 0.3s;"></div>
+              </div>
+              <div style="min-width: 60px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">${count} (${percentage}%)</div>
+            </div>
+          `;
+        }
+
+        html += '</div></div>';
+
+        // Posts by Client
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Client</h3>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        // Sort clients by post count
+        const clientEntries = Object.entries(metrics.postsByClient).sort((a, b) => b[1] - a[1]);
+        const topClients = clientEntries.slice(0, 8); // Show top 8 clients
+
+        topClients.forEach(function([clientName, count]) {
+          const percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(0) : 0;
+
+          html += `
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${clientName}</div>
+              <div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;">
+                <div style="height: 100%; background: #1a73e8; width: ${percentage}%; transition: width 0.3s;"></div>
+              </div>
+              <div style="min-width: 60px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">${count} (${percentage}%)</div>
+            </div>
+          `;
+        });
+
+        if (clientEntries.length > 8) {
+          html += `<div style="text-align: center; color: #5f6368; font-size: 13px; margin-top: 8px;">+ ${clientEntries.length - 8} more clients</div>`;
+        }
+
+        html += '</div></div>';
+
+        html += '</div>';
+
+        // Bottom Row - Metrics and Top Performers
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">';
+
+        // Approval Metrics
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Approval Metrics</h3>';
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">';
+
+        html += `
+          <div>
+            <div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Total Approvals</div>
+            <div style="font-size: 24px; font-weight: 500; color: #202124;">${metrics.approvalMetrics.total}</div>
+          </div>
+          <div>
+            <div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Approved</div>
+            <div style="font-size: 24px; font-weight: 500; color: #34a853;">${metrics.approvalMetrics.approved}</div>
+          </div>
+          <div>
+            <div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Pending</div>
+            <div style="font-size: 24px; font-weight: 500; color: #f9ab00;">${metrics.approvalMetrics.pending}</div>
+          </div>
+          <div>
+            <div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Rejected</div>
+            <div style="font-size: 24px; font-weight: 500; color: #ea4335;">${metrics.approvalMetrics.rejected}</div>
+          </div>
+        `;
+
+        html += '</div>';
+        html += `<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f3f4;">`;
+        html += `<div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Avg Approval Time</div>`;
+        html += `<div style="font-size: 20px; font-weight: 500; color: #202124;">${metrics.approvalMetrics.avgApprovalTimeDays} days</div>`;
+        html += '</div>';
+        html += '</div>';
+
+        // Top Performers
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">🏆 Top Content Creators</h3>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        metrics.topPerformers.forEach(function(performer, index) {
+          const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+          html += `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: ${index < 3 ? '#f8f9fa' : 'transparent'}; border-radius: 6px;">
+              <div style="font-size: 24px;">${medal}</div>
+              <div style="flex: 1;">
+                <div style="font-size: 14px; font-weight: 500; color: #202124;">${performer.name}</div>
+                <div style="font-size: 12px; color: #5f6368;">${performer.email}</div>
+              </div>
+              <div style="font-size: 18px; font-weight: 500; color: #1a73e8;">${performer.postCount}</div>
+            </div>
+          `;
+        });
+
+        if (metrics.topPerformers.length === 0) {
+          html += '<div style="text-align: center; color: #9aa0a6; padding: 20px;">No data available</div>';
+        }
+
+        html += '</div></div>';
+
+        html += '</div>';
+
+        html += '</div>';
+
+        content.innerHTML = html;
       }
 
       function editPost(postId) {

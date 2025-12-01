@@ -1548,3 +1548,221 @@ function deletePost(postId) {
     return _err_(e, 'deletePost');
   }
 }
+
+// --------- ANALYTICS DASHBOARD ---------
+
+/**
+ * Get analytics data for dashboard
+ * @param {Object} options - Filter options (dateRange, clientId, etc.)
+ * @returns {Object} Analytics data
+ */
+function getAnalyticsData(options) {
+  try {
+    options = options || {};
+
+    var posts = _readSheetAsObjects_('Posts', {});
+    var clients = _readSheetAsObjects_('Clients', {});
+    var approvals = _readSheetAsObjects_('Post_Approvals', {});
+
+    // Filter by date range if provided
+    var startDate = options.startDate ? new Date(options.startDate) : null;
+    var endDate = options.endDate ? new Date(options.endDate) : null;
+
+    if (startDate || endDate) {
+      posts = posts.filter(function(post) {
+        var postDate = post.Created_Date ? new Date(post.Created_Date) : null;
+        if (!postDate) return false;
+        if (startDate && postDate < startDate) return false;
+        if (endDate && postDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Filter by client if provided
+    if (options.clientId) {
+      posts = posts.filter(function(post) {
+        return post.Client_ID === options.clientId;
+      });
+    }
+
+    // Calculate metrics
+    var metrics = {
+      totalPosts: posts.length,
+      postsByStatus: calculatePostsByStatus(posts),
+      postsByClient: calculatePostsByClient(posts, clients),
+      postsByMonth: calculatePostsByMonth(posts),
+      approvalMetrics: calculateApprovalMetrics(approvals, posts),
+      publishingMetrics: calculatePublishingMetrics(posts),
+      topPerformers: calculateTopPerformers(posts)
+    };
+
+    return {
+      success: true,
+      metrics: metrics,
+      dateRange: {
+        start: startDate ? startDate.toISOString() : null,
+        end: endDate ? endDate.toISOString() : null
+      }
+    };
+
+  } catch (e) {
+    Logger.log('Error getting analytics: ' + e.message);
+    return _err_(e, 'getAnalyticsData');
+  }
+}
+
+/**
+ * Calculate posts by status
+ */
+function calculatePostsByStatus(posts) {
+  var statusCounts = {};
+  posts.forEach(function(post) {
+    var status = post.Status || 'Draft';
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  });
+  return statusCounts;
+}
+
+/**
+ * Calculate posts by client
+ */
+function calculatePostsByClient(posts, clients) {
+  var clientCounts = {};
+  var clientNames = {};
+
+  // Build client name lookup
+  clients.forEach(function(client) {
+    clientNames[client.ID] = client.Client_Name;
+  });
+
+  posts.forEach(function(post) {
+    var clientId = post.Client_ID;
+    var clientName = clientNames[clientId] || 'Unknown';
+    clientCounts[clientName] = (clientCounts[clientName] || 0) + 1;
+  });
+
+  return clientCounts;
+}
+
+/**
+ * Calculate posts by month
+ */
+function calculatePostsByMonth(posts) {
+  var monthCounts = {};
+
+  posts.forEach(function(post) {
+    var date = post.Scheduled_Date ? new Date(post.Scheduled_Date) :
+               post.Created_Date ? new Date(post.Created_Date) : null;
+
+    if (date) {
+      var monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+      monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+    }
+  });
+
+  return monthCounts;
+}
+
+/**
+ * Calculate approval metrics
+ */
+function calculateApprovalMetrics(approvals, posts) {
+  var totalApprovals = approvals.length;
+  var approved = approvals.filter(function(a) {
+    return a.Approval_Status === 'Approved';
+  }).length;
+  var pending = approvals.filter(function(a) {
+    return a.Approval_Status === 'Pending';
+  }).length;
+  var rejected = approvals.filter(function(a) {
+    return a.Approval_Status === 'Request_Changes';
+  }).length;
+
+  // Calculate average approval time
+  var approvalTimes = [];
+  approvals.forEach(function(approval) {
+    if (approval.Decision_Date && approval.Created_Date) {
+      var created = new Date(approval.Created_Date);
+      var decided = new Date(approval.Decision_Date);
+      var diffDays = (decided - created) / (1000 * 60 * 60 * 24);
+      if (diffDays >= 0 && diffDays < 365) { // Sanity check
+        approvalTimes.push(diffDays);
+      }
+    }
+  });
+
+  var avgApprovalTime = approvalTimes.length > 0 ?
+    approvalTimes.reduce(function(a, b) { return a + b; }, 0) / approvalTimes.length : 0;
+
+  return {
+    total: totalApprovals,
+    approved: approved,
+    pending: pending,
+    rejected: rejected,
+    approvalRate: totalApprovals > 0 ? (approved / totalApprovals * 100).toFixed(1) : 0,
+    avgApprovalTimeDays: avgApprovalTime.toFixed(1)
+  };
+}
+
+/**
+ * Calculate publishing metrics
+ */
+function calculatePublishingMetrics(posts) {
+  var scheduled = posts.filter(function(p) { return p.Status === 'Scheduled'; }).length;
+  var published = posts.filter(function(p) { return p.Status === 'Published'; }).length;
+  var draft = posts.filter(function(p) { return p.Status === 'Draft'; }).length;
+  var inReview = posts.filter(function(p) {
+    return p.Status === 'Internal_Review' || p.Status === 'Client_Review';
+  }).length;
+
+  // Calculate on-time publishing (scheduled vs published date variance)
+  var onTimeCount = 0;
+  var totalPublished = 0;
+
+  posts.forEach(function(post) {
+    if (post.Status === 'Published' && post.Scheduled_Date && post.Published_Date) {
+      totalPublished++;
+      var scheduled = new Date(post.Scheduled_Date);
+      var published = new Date(post.Published_Date);
+      var diffDays = Math.abs((published - scheduled) / (1000 * 60 * 60 * 24));
+
+      // Consider "on time" if within 1 day of scheduled
+      if (diffDays <= 1) {
+        onTimeCount++;
+      }
+    }
+  });
+
+  return {
+    scheduled: scheduled,
+    published: published,
+    draft: draft,
+    inReview: inReview,
+    onTimeRate: totalPublished > 0 ? (onTimeCount / totalPublished * 100).toFixed(1) : 0,
+    totalPublished: totalPublished
+  };
+}
+
+/**
+ * Calculate top performers (most active creators)
+ */
+function calculateTopPerformers(posts) {
+  var creatorCounts = {};
+
+  posts.forEach(function(post) {
+    var creator = post.Created_By || 'Unknown';
+    creatorCounts[creator] = (creatorCounts[creator] || 0) + 1;
+  });
+
+  // Convert to array and sort
+  var performers = Object.keys(creatorCounts).map(function(email) {
+    return {
+      email: email,
+      count: creatorCounts[email]
+    };
+  });
+
+  performers.sort(function(a, b) { return b.count - a.count; });
+
+  return performers.slice(0, 5); // Top 5
+}
