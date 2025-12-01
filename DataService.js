@@ -1590,6 +1590,8 @@ function getAnalyticsData(options) {
       totalPosts: posts.length,
       postsByStatus: calculatePostsByStatus(posts),
       postsByClient: calculatePostsByClient(posts, clients),
+      postsBySubsidiary: calculatePostsBySubsidiary(posts, clients),
+      postsByCategory: calculatePostsByCategory(posts),
       postsByMonth: calculatePostsByMonth(posts),
       approvalMetrics: calculateApprovalMetrics(approvals, posts),
       publishingMetrics: calculatePublishingMetrics(posts),
@@ -1765,4 +1767,61 @@ function calculateTopPerformers(posts) {
   performers.sort(function(a, b) { return b.count - a.count; });
 
   return performers.slice(0, 5); // Top 5
+}
+
+/**
+ * Calculate posts by subsidiary
+ */
+function calculatePostsBySubsidiary(posts, clients) {
+  var subsidiaryCounts = {};
+  var subsidiaryNames = {};
+
+  // Build subsidiary name lookup from clients
+  clients.forEach(function(client) {
+    if (client.Subsidiaries) {
+      var subs = client.Subsidiaries.split(',').map(function(s) { return s.trim(); });
+      subs.forEach(function(sub) {
+        if (sub && sub !== '') {
+          subsidiaryNames[sub] = sub;
+        }
+      });
+    }
+  });
+
+  // Count posts per subsidiary
+  posts.forEach(function(post) {
+    if (post.Subsidiary_IDs) {
+      var subs = post.Subsidiary_IDs.split(',').map(function(s) { return s.trim(); });
+      subs.forEach(function(sub) {
+        if (sub && sub !== '') {
+          subsidiaryCounts[sub] = (subsidiaryCounts[sub] || 0) + 1;
+        }
+      });
+    }
+  });
+
+  return subsidiaryCounts;
+}
+
+/**
+ * Calculate posts by content category
+ */
+function calculatePostsByCategory(posts) {
+  var categoryCounts = {};
+
+  posts.forEach(function(post) {
+    if (post.Content_Category) {
+      var categories = post.Content_Category.split(',').map(function(c) { return c.trim(); });
+      categories.forEach(function(category) {
+        if (category && category !== '') {
+          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+        }
+      });
+    } else {
+      // Count posts without category
+      categoryCounts['Uncategorized'] = (categoryCounts['Uncategorized'] || 0) + 1;
+    }
+  });
+
+  return categoryCounts;
 }

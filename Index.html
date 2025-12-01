@@ -3813,6 +3813,67 @@
 
         html += '</div>';
 
+        // Third Row - Subsidiary and Category Distribution
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px;">';
+
+        // Posts by Subsidiary
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Subsidiary</h3>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        // Sort subsidiaries by post count
+        const subsidiaryEntries = Object.entries(metrics.postsBySubsidiary || {}).sort((a, b) => b[1] - a[1]);
+
+        if (subsidiaryEntries.length > 0) {
+          subsidiaryEntries.forEach(function([subsidiaryName, count]) {
+            const percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(1) : 0;
+
+            html += `
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${subsidiaryName}</div>
+                <div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;">
+                  <div style="height: 100%; background: #7c3aed; width: ${percentage}%; transition: width 0.3s;"></div>
+                </div>
+                <div style="min-width: 70px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">${count} (${percentage}%)</div>
+              </div>
+            `;
+          });
+        } else {
+          html += '<div style="text-align: center; color: #9aa0a6; padding: 20px;">No subsidiary data available</div>';
+        }
+
+        html += '</div></div>';
+
+        // Posts by Content Category
+        html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+        html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Content Category</h3>';
+        html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+
+        // Sort categories by post count
+        const categoryEntries = Object.entries(metrics.postsByCategory || {}).sort((a, b) => b[1] - a[1]);
+
+        if (categoryEntries.length > 0) {
+          categoryEntries.forEach(function([categoryName, count]) {
+            const percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(1) : 0;
+
+            html += `
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${categoryName}</div>
+                <div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;">
+                  <div style="height: 100%; background: #059669; width: ${percentage}%; transition: width 0.3s;"></div>
+                </div>
+                <div style="min-width: 70px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">${count} (${percentage}%)</div>
+              </div>
+            `;
+          });
+        } else {
+          html += '<div style="text-align: center; color: #9aa0a6; padding: 20px;">No category data available</div>';
+        }
+
+        html += '</div></div>';
+
+        html += '</div>';
+
         html += '</div>';
 
         content.innerHTML = html;
