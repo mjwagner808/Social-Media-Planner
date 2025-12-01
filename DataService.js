@@ -1614,6 +1614,28 @@ function getAnalyticsData(options) {
 }
 
 /**
+ * Get analytics data for client portal (filtered by client)
+ * @param {string} token - Client access token
+ * @returns {Object} Analytics data filtered by client
+ */
+function getClientAnalyticsData(token) {
+  try {
+    // Validate token
+    var authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    // Get analytics filtered by this client's ID
+    return getAnalyticsData({clientId: authorizedClient.Client_ID});
+
+  } catch (e) {
+    Logger.log('Error getting client analytics: ' + e.message);
+    return _err_(e, 'getClientAnalyticsData');
+  }
+}
+
+/**
  * Calculate posts by status
  */
 function calculatePostsByStatus(posts) {
@@ -1774,27 +1796,24 @@ function calculateTopPerformers(posts) {
  */
 function calculatePostsBySubsidiary(posts, clients) {
   var subsidiaryCounts = {};
-  var subsidiaryNames = {};
+  var subsidiaryIdToName = {};
 
-  // Build subsidiary name lookup from clients
-  clients.forEach(function(client) {
-    if (client.Subsidiaries) {
-      var subs = client.Subsidiaries.split(',').map(function(s) { return s.trim(); });
-      subs.forEach(function(sub) {
-        if (sub && sub !== '') {
-          subsidiaryNames[sub] = sub;
-        }
-      });
+  // Build subsidiary ID to name lookup from Subsidiaries sheet
+  var allSubsidiaries = _readSheetAsObjects_('Subsidiaries', {});
+  allSubsidiaries.forEach(function(sub) {
+    if (sub.ID && sub.Subsidiary_Name) {
+      subsidiaryIdToName[sub.ID] = sub.Subsidiary_Name;
     }
   });
 
-  // Count posts per subsidiary
+  // Count posts per subsidiary (by name)
   posts.forEach(function(post) {
     if (post.Subsidiary_IDs) {
-      var subs = post.Subsidiary_IDs.split(',').map(function(s) { return s.trim(); });
-      subs.forEach(function(sub) {
-        if (sub && sub !== '') {
-          subsidiaryCounts[sub] = (subsidiaryCounts[sub] || 0) + 1;
+      var subIds = post.Subsidiary_IDs.split(',').map(function(s) { return s.trim(); });
+      subIds.forEach(function(subId) {
+        if (subId && subId !== '') {
+          var subName = subsidiaryIdToName[subId] || subId; // Fallback to ID if name not found
+          subsidiaryCounts[subName] = (subsidiaryCounts[subName] || 0) + 1;
         }
       });
     }
@@ -1808,13 +1827,23 @@ function calculatePostsBySubsidiary(posts, clients) {
  */
 function calculatePostsByCategory(posts) {
   var categoryCounts = {};
+  var categoryIdToName = {};
+
+  // Build category ID to name lookup from Content_Categories sheet
+  var allCategories = _readSheetAsObjects_('Content_Categories', {});
+  allCategories.forEach(function(cat) {
+    if (cat.ID && cat.Category_Name) {
+      categoryIdToName[cat.ID] = cat.Category_Name;
+    }
+  });
 
   posts.forEach(function(post) {
     if (post.Content_Category) {
-      var categories = post.Content_Category.split(',').map(function(c) { return c.trim(); });
-      categories.forEach(function(category) {
-        if (category && category !== '') {
-          categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+      var categoryIds = post.Content_Category.split(',').map(function(c) { return c.trim(); });
+      categoryIds.forEach(function(catId) {
+        if (catId && catId !== '') {
+          var catName = categoryIdToName[catId] || catId; // Fallback to ID if name not found
+          categoryCounts[catName] = (categoryCounts[catName] || 0) + 1;
         }
       });
     } else {

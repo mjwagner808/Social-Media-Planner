@@ -530,6 +530,10 @@
   <div class="header">
     <div class="logo">📅 Social Media Content Calendar</div>
     <div style="display: flex; align-items: center; gap: 16px;">
+      <button id="analyticsBtn" onclick="openClientAnalytics()"
+              style="display: none; padding: 8px 16px; background: #9334e9; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
+        📊 Analytics
+      </button>
       <button id="manageReviewersBtn" onclick="openManageReviewers()"
               style="display: none; padding: 8px 16px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
         👥 Manage Reviewers
@@ -695,8 +699,9 @@
           document.getElementById('welcomeTitle').textContent = 'Welcome, ' + displayName;
           document.getElementById('clientInfo').textContent = clientInfo.Client_Name;
 
-          // Show Manage Reviewers button only for client admins
+          // Show Analytics and Manage Reviewers buttons only for client admins
           if (clientInfo.Is_Admin) {
+            document.getElementById('analyticsBtn').style.display = 'block';
             document.getElementById('manageReviewersBtn').style.display = 'block';
           }
 
