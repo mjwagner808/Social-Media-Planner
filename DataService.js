@@ -814,6 +814,24 @@ function getPostById(postId) {
       post.categories = [];
     }
 
+    // Get comments for this post
+    try {
+      post.comments = getCommentsForPost(postId);
+      Logger.log('Comments loaded: ' + post.comments.length);
+    } catch (commentError) {
+      Logger.log('Error loading comments: ' + commentError.message);
+      post.comments = [];
+    }
+
+    // Get approval history for this post
+    try {
+      post.approvalHistory = getApprovalHistory(postId);
+      Logger.log('Approval history loaded: ' + post.approvalHistory.length);
+    } catch (approvalError) {
+      Logger.log('Error loading approval history: ' + approvalError.message);
+      post.approvalHistory = [];
+    }
+
     // Final pass: convert ALL remaining date objects to strings
     // This ensures nested objects (client, subsidiaries, categories, platforms) are serializable
     var finalPost = JSON.parse(JSON.stringify(post, function(key, value) {
@@ -990,6 +1008,221 @@ function getCommentsForPost(postId) {
     return comments;
   } catch (e) {
     Logger.log('Error getting comments: ' + e.message);
+    return [];
+  }
+}
+
+// ---------------- VERSION TRACKING ----------------
+
+/**
+ * Create a version record when post content is edited
+ * Tracks changes to Post_Copy, Hashtags, and other fields
+ * @param {string} postId - Post ID
+ * @param {Object} oldPost - Post object before changes
+ * @param {Object} newPost - Post object after changes
+ * @param {string} changeType - 'Agency_Edit' or 'Client_Edit'
+ * @returns {Object} - {success: true, versionId: 'VER-xxx'} or error
+ */
+function createPostVersion(postId, oldPost, newPost, changeType, shareWithClient, postStatus) {
+  try {
+    Logger.log('=== CREATING POST VERSION ===');
+    Logger.log('Post ID: ' + postId);
+    Logger.log('Change Type: ' + changeType);
+    Logger.log('Share With Client: ' + (shareWithClient ? 'Yes' : 'No'));
+    Logger.log('Post Status: ' + (postStatus || 'Not provided'));
+
+    var currentUser = Session.getActiveUser().getEmail();
+
+    // Check what fields changed
+    var changedFields = [];
+    var hasChanges = false;
+
+    // Track Post_Copy changes
+    var postCopyOld = oldPost.Post_Copy || '';
+    var postCopyNew = newPost.Post_Copy || '';
+    if (postCopyOld !== postCopyNew) {
+      changedFields.push('Post_Copy');
+      hasChanges = true;
+    }
+
+    // Track Hashtags changes
+    var hashtagsOld = oldPost.Hashtags || '';
+    var hashtagsNew = newPost.Hashtags || '';
+    if (hashtagsOld !== hashtagsNew) {
+      changedFields.push('Hashtags');
+      hasChanges = true;
+    }
+
+    // Track Notes changes (agency only)
+    var notesOld = oldPost.Notes || '';
+    var notesNew = newPost.Notes || '';
+    if (notesOld !== notesNew) {
+      changedFields.push('Notes');
+      hasChanges = true;
+    }
+
+    // IMPORTANT: If no content changes but we're tracking a status change,
+    // still create a version to record the workflow transition
+    if (!hasChanges) {
+      if (postStatus) {
+        Logger.log('No content changes, but tracking status change to: ' + postStatus);
+        changedFields.push('Status');
+        hasChanges = true;
+      } else {
+        Logger.log('No tracked fields changed, skipping version creation');
+        return {success: true, message: 'No changes to track'};
+      }
+    }
+
+    Logger.log('Changed fields: ' + changedFields.join(', '));
+
+    // Get or create Post_Versions sheet
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('Post_Versions');
+
+    if (!sheet) {
+      Logger.log('Post_Versions sheet does not exist, creating it...');
+      sheet = ss.insertSheet('Post_Versions');
+
+      // Create headers
+      var headers = [
+        'ID', 'Post_ID', 'Version_Number', 'Changed_By', 'Changed_Date',
+        'Changed_Fields', 'Post_Copy_Old', 'Post_Copy_New',
+        'Hashtags_Old', 'Hashtags_New', 'Notes_Old', 'Notes_New',
+        'Change_Type', 'Share_With_Client', 'Post_Status'
+      ];
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      Logger.log('✅ Post_Versions sheet created');
+    }
+
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    // MIGRATION: Check if Share_With_Client column exists, if not add it
+    var hasShareWithClient = headers.indexOf('Share_With_Client') !== -1;
+    if (!hasShareWithClient) {
+      Logger.log('⚠️ Share_With_Client column missing, adding it now...');
+      var lastCol = sheet.getLastColumn();
+      sheet.getRange(1, lastCol + 1).setValue('Share_With_Client');
+      sheet.getRange(1, lastCol + 1).setFontWeight('bold');
+      // Re-read headers
+      headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      Logger.log('✅ Share_With_Client column added');
+    }
+
+    // MIGRATION: Check if Post_Status column exists, if not add it
+    var hasPostStatus = headers.indexOf('Post_Status') !== -1;
+    if (!hasPostStatus) {
+      Logger.log('⚠️ Post_Status column missing, adding it now...');
+      var lastCol = sheet.getLastColumn();
+      sheet.getRange(1, lastCol + 1).setValue('Post_Status');
+      sheet.getRange(1, lastCol + 1).setFontWeight('bold');
+      // Re-read headers
+      headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      Logger.log('✅ Post_Status column added');
+    }
+
+    // Get current version number for this post
+    var existingVersions = _readSheetAsObjects_('Post_Versions', {
+      filterFn: function(v) { return v.Post_ID === postId; }
+    });
+    var versionNumber = existingVersions.length + 1;
+
+    // Generate version ID
+    var versionId = generateId('VER');
+
+    // Prepare row data
+    var rowData = [];
+    headers.forEach(function(header) {
+      switch(header) {
+        case 'ID':
+          rowData.push(versionId);
+          break;
+        case 'Post_ID':
+          rowData.push(postId);
+          break;
+        case 'Version_Number':
+          rowData.push(versionNumber);
+          break;
+        case 'Changed_By':
+          rowData.push(currentUser);
+          break;
+        case 'Changed_Date':
+          rowData.push(new Date());
+          break;
+        case 'Changed_Fields':
+          rowData.push(changedFields.join(', '));
+          break;
+        case 'Post_Copy_Old':
+          rowData.push(postCopyOld);
+          break;
+        case 'Post_Copy_New':
+          rowData.push(postCopyNew);
+          break;
+        case 'Hashtags_Old':
+          rowData.push(hashtagsOld);
+          break;
+        case 'Hashtags_New':
+          rowData.push(hashtagsNew);
+          break;
+        case 'Notes_Old':
+          rowData.push(notesOld);
+          break;
+        case 'Notes_New':
+          rowData.push(notesNew);
+          break;
+        case 'Change_Type':
+          rowData.push(changeType);
+          break;
+        case 'Share_With_Client':
+          // Client_Edit changes are always shared; Agency_Edit changes use the checkbox value
+          rowData.push(changeType === 'Client_Edit' ? true : (shareWithClient ? true : false));
+          break;
+        case 'Post_Status':
+          // Track the post's current status when this version was created
+          rowData.push(postStatus || '');
+          break;
+        default:
+          rowData.push('');
+      }
+    });
+
+    sheet.appendRow(rowData);
+    Logger.log('✅ Version created: ' + versionId + ' (Version #' + versionNumber + ')');
+
+    return {success: true, versionId: versionId, versionNumber: versionNumber};
+
+  } catch (e) {
+    Logger.log('ERROR creating post version: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Get version history for a post
+ * @param {string} postId - Post ID
+ * @returns {Array} - Array of version objects
+ */
+function getPostVersions(postId) {
+  try {
+    var versions = _readSheetAsObjects_('Post_Versions', {
+      filterFn: function(v) { return v.Post_ID === postId; },
+      sortFn: function(a, b) {
+        // Sort by version number descending (newest first)
+        return (b.Version_Number || 0) - (a.Version_Number || 0);
+      },
+      coerceFn: function(v) {
+        // Convert date to ISO string
+        if (v.Changed_Date && Object.prototype.toString.call(v.Changed_Date) === '[object Date]') {
+          v.Changed_Date = _toIso_(v.Changed_Date);
+        }
+        return v;
+      }
+    });
+
+    return versions;
+  } catch (e) {
+    Logger.log('Error getting post versions: ' + e.message);
     return [];
   }
 }
@@ -1183,14 +1416,22 @@ function createPostFromUI(postData) {
  * @param {Object} postData - Updated form data object
  * @returns {Object} - {success: true} or error
  */
-function updatePostFromUI(postId, postData) {
+function updatePostFromUI(postId, postData, versionStatus) {
   try {
     Logger.log('========== updatePostFromUI called ==========');
     Logger.log('Updating post: ' + postId);
     Logger.log('Full postData: ' + JSON.stringify(postData));
+    Logger.log('Version status override: ' + (versionStatus || 'NONE'));
 
     var currentUser = Session.getActiveUser().getEmail();
     var timestamp = new Date();
+
+    // STEP 1: Get OLD post data for version tracking
+    var oldPost = _getPostByIdSimple(postId);
+    if (!oldPost) {
+      return { success: false, error: 'Post not found: ' + postId };
+    }
+    Logger.log('Retrieved old post data for version tracking');
 
     // NOTE: We save category IDs (not names) to match the create function behavior
 
@@ -1326,6 +1567,29 @@ function updatePostFromUI(postId, postData) {
     }
 
     Logger.log('Post updated successfully');
+
+    // STEP 2: Create version record to track changes
+    var newPost = {
+      Post_Copy: postData.copy || '',
+      Hashtags: postData.hashtags || '',
+      Notes: postData.notes || ''
+    };
+
+    // Determine change type based on user
+    var changeType = 'Agency_Edit'; // Default
+    if (postData.changedBy === 'Client') {
+      changeType = 'Client_Edit';
+    }
+
+    // Use versionStatus parameter if provided (for review workflows), otherwise use post status
+    // This allows version to be tagged with target status even if post status hasn't been updated yet
+    var statusForVersion = versionStatus || postData.status || oldPost.Status;
+    var versionResult = createPostVersion(postId, oldPost, newPost, changeType, postData.shareWithClient, statusForVersion);
+    if (versionResult.success) {
+      Logger.log('✅ Version tracking: ' + (versionResult.versionId || 'No changes to track'));
+    } else {
+      Logger.log('⚠️ Version tracking failed (non-fatal): ' + versionResult.error);
+    }
 
     return {
       success: true,
@@ -1535,6 +1799,30 @@ function deletePost(postId) {
       }
     } catch (e) {
       Logger.log('⚠️ Error deleting notifications (non-critical): ' + e.message);
+    }
+
+    // 6. Delete from Post_Versions
+    try {
+      var versionsSheet = _getSheet_('Post_Versions');
+      if (versionsSheet) {
+        var versionData = versionsSheet.getDataRange().getValues();
+        var versionHeaders = versionData[0];
+        var versionPostIdIndex = versionHeaders.indexOf('Post_ID');
+
+        if (versionPostIdIndex !== -1) {
+          var deletedCount = 0;
+          // Delete from bottom to top
+          for (var n = versionData.length - 1; n >= 1; n--) {
+            if (versionData[n][versionPostIdIndex] === postId) {
+              versionsSheet.deleteRow(n + 1);
+              deletedCount++;
+            }
+          }
+          Logger.log('✅ Deleted from Post_Versions: ' + deletedCount + ' records');
+        }
+      }
+    } catch (e) {
+      Logger.log('⚠️ Error deleting versions (non-critical): ' + e.message);
     }
 
     Logger.log('✅ Post deleted successfully: ' + postId);
@@ -1853,4 +2141,187 @@ function calculatePostsByCategory(posts) {
   });
 
   return categoryCounts;
+}
+
+// =====================================================
+// BULK ACTIONS
+// =====================================================
+
+/**
+ * Bulk delete multiple posts by ID
+ * @param {Array<string>} postIds - Array of post IDs to delete
+ * @returns {Object} {success: boolean, count: number, error: string}
+ */
+function bulkDeletePosts(postIds) {
+  try {
+    if (!postIds || !Array.isArray(postIds) || postIds.length === 0) {
+      return {success: false, error: 'No post IDs provided'};
+    }
+
+    var postsSheet = _getSheet_('Posts');
+    var data = postsSheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIndex = headers.indexOf('ID');
+
+    if (idIndex === -1) {
+      return {success: false, error: 'ID column not found in Posts sheet'};
+    }
+
+    var rowsToDelete = [];
+
+    // Find all rows to delete (iterate backwards to avoid index shifts)
+    for (var i = data.length - 1; i >= 1; i--) {
+      var rowId = data[i][idIndex];
+      if (postIds.indexOf(rowId) > -1) {
+        rowsToDelete.push(i + 1); // +1 for sheet row number (1-indexed)
+      }
+    }
+
+    // Delete rows
+    rowsToDelete.forEach(function(rowNum) {
+      postsSheet.deleteRow(rowNum);
+    });
+
+    // Also delete from Post_Platforms sheet
+    var platformsSheet = _getSheet_('Post_Platforms');
+    var platformData = platformsSheet.getDataRange().getValues();
+    var platformHeaders = platformData[0];
+    var platformPostIdIndex = platformHeaders.indexOf('Post_ID');
+
+    if (platformPostIdIndex !== -1) {
+      for (var j = platformData.length - 1; j >= 1; j--) {
+        var platformPostId = platformData[j][platformPostIdIndex];
+        if (postIds.indexOf(platformPostId) > -1) {
+          platformsSheet.deleteRow(j + 1);
+        }
+      }
+    }
+
+    // Also delete from Post_Versions sheet
+    try {
+      var versionsSheet = _getSheet_('Post_Versions');
+      if (versionsSheet) {
+        var versionData = versionsSheet.getDataRange().getValues();
+        var versionHeaders = versionData[0];
+        var versionPostIdIndex = versionHeaders.indexOf('Post_ID');
+
+        if (versionPostIdIndex !== -1) {
+          // Delete from bottom to top to avoid row number shifting
+          Logger.log('Scanning for version records to delete...');
+          var deletedCount = 0;
+          for (var k = versionData.length - 1; k >= 1; k--) {
+            var versionPostId = versionData[k][versionPostIdIndex];
+            if (postIds.indexOf(versionPostId) > -1) {
+              Logger.log('Deleting version row ' + (k + 1) + ' for Post_ID: ' + versionPostId);
+              versionsSheet.deleteRow(k + 1);
+              deletedCount++;
+            }
+          }
+          Logger.log('✅ Post_Versions cleanup complete: ' + deletedCount + ' records deleted');
+        }
+      }
+    } catch (e) {
+      Logger.log('❌ Error deleting from Post_Versions: ' + e.toString());
+      Logger.log('Stack trace: ' + e.stack);
+    }
+
+    return {success: true, count: rowsToDelete.length};
+  } catch (e) {
+    Logger.log('Error in bulkDeletePosts: ' + e.toString());
+    return {success: false, error: e.toString()};
+  }
+}
+
+/**
+ * Bulk update status for multiple posts
+ * @param {Array<string>} postIds - Array of post IDs to update
+ * @param {string} newStatus - New status value
+ * @returns {Object} {success: boolean, count: number, error: string}
+ */
+function bulkUpdateStatus(postIds, newStatus) {
+  try {
+    if (!postIds || !Array.isArray(postIds) || postIds.length === 0) {
+      return {success: false, error: 'No post IDs provided'};
+    }
+
+    if (!newStatus || newStatus === '') {
+      return {success: false, error: 'No status provided'};
+    }
+
+    var postsSheet = _getSheet_('Posts');
+    var data = postsSheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIndex = headers.indexOf('ID');
+    var statusIndex = headers.indexOf('Status');
+
+    if (idIndex === -1 || statusIndex === -1) {
+      return {success: false, error: 'Required columns not found'};
+    }
+
+    var count = 0;
+
+    // Update status for matching rows
+    for (var i = 1; i < data.length; i++) {
+      var rowId = data[i][idIndex];
+      if (postIds.indexOf(rowId) > -1) {
+        postsSheet.getRange(i + 1, statusIndex + 1).setValue(newStatus);
+        count++;
+      }
+    }
+
+    return {success: true, count: count};
+  } catch (e) {
+    Logger.log('Error in bulkUpdateStatus: ' + e.toString());
+    return {success: false, error: e.toString()};
+  }
+}
+
+/**
+ * Bulk reschedule multiple posts to a new date
+ * @param {Array<string>} postIds - Array of post IDs to reschedule
+ * @param {string} newDate - New date in YYYY-MM-DD format
+ * @returns {Object} {success: boolean, count: number, error: string}
+ */
+function bulkReschedule(postIds, newDate) {
+  try {
+    if (!postIds || !Array.isArray(postIds) || postIds.length === 0) {
+      return {success: false, error: 'No post IDs provided'};
+    }
+
+    if (!newDate || newDate === '') {
+      return {success: false, error: 'No date provided'};
+    }
+
+    // Parse and validate date
+    var parsedDate = new Date(newDate);
+    if (isNaN(parsedDate.getTime())) {
+      return {success: false, error: 'Invalid date format'};
+    }
+
+    var postsSheet = _getSheet_('Posts');
+    var data = postsSheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIndex = headers.indexOf('ID');
+    var dateIndex = headers.indexOf('Scheduled_Date');
+
+    if (idIndex === -1 || dateIndex === -1) {
+      return {success: false, error: 'Required columns not found'};
+    }
+
+    var count = 0;
+
+    // Update date for matching rows
+    for (var i = 1; i < data.length; i++) {
+      var rowId = data[i][idIndex];
+      if (postIds.indexOf(rowId) > -1) {
+        postsSheet.getRange(i + 1, dateIndex + 1).setValue(parsedDate);
+        count++;
+      }
+    }
+
+    return {success: true, count: count};
+  } catch (e) {
+    Logger.log('Error in bulkReschedule: ' + e.toString());
+    return {success: false, error: e.toString()};
+  }
 }

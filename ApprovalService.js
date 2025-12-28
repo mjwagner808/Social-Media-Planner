@@ -24,10 +24,10 @@ function submitForInternalReview(postId) {
   if (!client) {
     return {success: false, error: 'Client not found'};
   }
-  
-  // Update post status
+
+  // Update post status to Internal_Review
   updatePostStatus(postId, 'Internal_Review');
-  
+
   // Parse internal approver emails
   // Get internal approvers from the post (if specified), otherwise fall back to client settings
 var approvers;
@@ -106,19 +106,19 @@ function submitForClientReview(postId, skipInternal) {
     // Allow submitting to client review if:
     // 1. No internal approval records exist yet (never submitted for internal review), OR
     // 2. All internal approvals are approved
-    // 3. Post status is Draft (allowing direct submission to client without internal review)
+    // 3. Post status is Draft or Internal_Review (allowing bypass of pending internal approvals)
     var hasInternalApprovals = internalApprovals && internalApprovals.length > 0;
     var allInternalApproved = !hasInternalApprovals || internalApprovals.every(function(approval) {
       return approval.Approval_Status === 'Approved';
     });
-    var isDraft = post.Status === 'Draft';
+    var canBypass = post.Status === 'Draft' || post.Status === 'Internal_Review';
 
     // Only enforce internal approval completion if:
     // - Internal approval records exist (meaning post was submitted for internal review)
     // - AND not all are approved
-    // - AND post is not in Draft status (if Draft, allow skipping internal entirely)
-    if (hasInternalApprovals && !allInternalApproved && !isDraft) {
-      return {success: false, error: 'Internal approvals must be completed first. To skip internal review, use the "Skip Internal" button from Draft status.'};
+    // - AND post is not in a status that allows bypassing (Draft or Internal_Review)
+    if (hasInternalApprovals && !allInternalApproved && !canBypass) {
+      return {success: false, error: 'Internal approvals must be completed first.'};
     }
   }
   
@@ -127,20 +127,9 @@ function submitForClientReview(postId, skipInternal) {
   if (!client) {
     return {success: false, error: 'Client not found'};
   }
-  
-  // Update post status (with detailed logging)
-  try {
-    Logger.log('STEP 1: Attempting to update post status to Client_Review');
-    Logger.log('  Post ID: ' + postId);
-    var statusResult = updatePostStatus(postId, 'Client_Review');
-    Logger.log('✅ STEP 1 COMPLETE: Status updated successfully');
-    Logger.log('  Result: ' + JSON.stringify(statusResult));
-  } catch (statusError) {
-    Logger.log('❌ ERROR IN STEP 1 (updatePostStatus):');
-    Logger.log('  Error message: ' + statusError.message);
-    Logger.log('  Stack trace: ' + statusError.stack);
-    return {success: false, error: 'Failed to update status: ' + statusError.message};
-  }
+
+  // Update post status to Client_Review
+  updatePostStatus(postId, 'Client_Review');
 
   // Parse client approver emails
 // Get client approvers from the post (if specified), otherwise fall back to client settings
@@ -679,9 +668,25 @@ function submitApprovalDecision(approvalId, decision, comments) {
   
   // Update post status based on approval results
   if (anyRejected) {
+    // Update status to Draft
     updatePostStatus(postId, 'Draft');
+
+    // Create version record to track this status change
+    var post = _getPostByIdSimple(postId);
+    if (post) {
+      var postContent = {
+        Post_Copy: post.Post_Copy || '',
+        Hashtags: post.Hashtags || '',
+        Notes: post.Notes || ''
+      };
+      var versionResult = createPostVersion(postId, postContent, postContent, 'Agency_Edit', false, 'Draft');
+      if (versionResult.success) {
+        Logger.log('✅ Version created for changes requested - returned to Draft');
+      }
+    }
+
     return {
-      success: true, 
+      success: true,
       message: 'Changes requested. Post returned to Draft status.',
       nextAction: 'returned_to_draft'
     };
@@ -696,6 +701,21 @@ function submitApprovalDecision(approvalId, decision, comments) {
   } else if (allApproved && stage === 'Client') {
     // All client approvals complete - mark as approved
     updatePostStatus(postId, 'Approved');
+
+    // Create version record to track this status change
+    var post = _getPostByIdSimple(postId);
+    if (post) {
+      var postContent = {
+        Post_Copy: post.Post_Copy || '',
+        Hashtags: post.Hashtags || '',
+        Notes: post.Notes || ''
+      };
+      var versionResult = createPostVersion(postId, postContent, postContent, 'Agency_Edit', true, 'Approved');
+      if (versionResult.success) {
+        Logger.log('✅ Version created for approval - status set to Approved');
+      }
+    }
+
     return {
       success: true,
       message: 'Post fully approved!',
@@ -726,4 +746,37 @@ function getApprovalById(approvalId) {
 function getAllApprovals() {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   return getDataAsObjects(sheet.getName());
+}
+
+/**
+ * Get approval history for a post (timeline of all approval actions)
+ * Returns array of approval records sorted by date
+ */
+function getApprovalHistory(postId) {
+  try {
+    var approvals = getAllApprovals();
+
+    // Filter approvals for this post
+    var postApprovals = approvals.filter(function(approval) {
+      return approval.Post_ID === postId;
+    });
+
+    // Sort by decision date (most recent first), with pending approvals at the end
+    postApprovals.sort(function(a, b) {
+      // Pending approvals (no decision date) go to the end
+      if (!a.Approval_Decision_Date && b.Approval_Decision_Date) return 1;
+      if (a.Approval_Decision_Date && !b.Approval_Decision_Date) return -1;
+      if (!a.Approval_Decision_Date && !b.Approval_Decision_Date) return 0;
+
+      // Sort completed approvals by decision date (newest first)
+      var dateA = new Date(a.Approval_Decision_Date);
+      var dateB = new Date(b.Approval_Decision_Date);
+      return dateB - dateA;
+    });
+
+    return postApprovals;
+  } catch (e) {
+    Logger.log('Error getting approval history: ' + e.message);
+    return [];
+  }
 }

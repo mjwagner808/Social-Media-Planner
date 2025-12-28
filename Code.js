@@ -75,13 +75,17 @@ function doGet(e) {
       Logger.log('Post ID: ' + e.parameter.postId);
       Logger.log('Decision: ' + e.parameter.decision);
       Logger.log('Notes: ' + (e.parameter.notes || ''));
+      Logger.log('External Approver: ' + (e.parameter.externalApprover || ''));
+      Logger.log('External Approval Date: ' + (e.parameter.externalApprovalDate || ''));
 
       const result = handleClientApproval(
         token,
         e.parameter.postId,
         e.parameter.decision,
         e.parameter.notes || '',
-        e.parameter.commentType || ''
+        e.parameter.commentType || '',
+        e.parameter.externalApprover || '',
+        e.parameter.externalApprovalDate || ''
       );
 
       Logger.log('handleClientApproval returned: ' + JSON.stringify(result));
@@ -91,6 +95,22 @@ function doGet(e) {
       const response = callback + '(' + jsonOutput + ')';
 
       Logger.log('Returning JSONP response with callback: ' + callback);
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Client analytics endpoint
+    if (action === 'getClientAnalyticsData' && token) {
+      Logger.log('✅ CLIENT ANALYTICS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+
+      const analyticsData = getClientAnalyticsData(token);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(analyticsData);
+      const response = callback + '(' + jsonOutput + ')';
 
       return ContentService
         .createTextOutput(response)
@@ -172,6 +192,71 @@ function doGet(e) {
       Logger.log('Reviewer IDs: ' + e.parameter.reviewerIds);
 
       const result = updatePostReviewersForAdmin(token, e.parameter.postId, e.parameter.reviewerIds);
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Save client edit (client admin only)
+    if (action === 'saveClientEdit' && token) {
+      Logger.log('✅ SAVE CLIENT EDIT ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+
+      const result = handleClientEdit(
+        token,
+        e.parameter.postId,
+        e.parameter.postCopy || '',
+        e.parameter.hashtags || ''
+      );
+
+      Logger.log('handleClientEdit returned: ' + JSON.stringify(result));
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Save external approval tracking (client admin only)
+    if (action === 'saveExternalApproval' && token) {
+      Logger.log('✅ SAVE EXTERNAL APPROVAL ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+
+      const result = handleExternalApproval(
+        token,
+        e.parameter.postId,
+        e.parameter.externalApprover || '',
+        e.parameter.externalApprovalDate || ''
+      );
+
+      Logger.log('handleExternalApproval returned: ' + JSON.stringify(result));
+
+      const callback = e.parameter.callback || 'callback';
+      const jsonOutput = JSON.stringify(result);
+      const response = callback + '(' + jsonOutput + ')';
+
+      return ContentService
+        .createTextOutput(response)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    // Get version history for client portal
+    if (action === 'getPostVersions' && token) {
+      Logger.log('✅ GET POST VERSIONS ENDPOINT HIT');
+      Logger.log('Token: ' + token);
+      Logger.log('Post ID: ' + e.parameter.postId);
+
+      const result = getPostVersionsForClient(token, e.parameter.postId);
 
       const callback = e.parameter.callback || 'callback';
       const jsonOutput = JSON.stringify(result);
@@ -708,9 +793,12 @@ function validateClientAccess(token) {
  * @param {string} postId - Post ID being reviewed
  * @param {string} decision - 'Approved' or 'Changes_Requested'
  * @param {string} notes - Client comments
+ * @param {string} commentType - Comment type
+ * @param {string} externalApprover - External approver name/title (optional, auto-saved)
+ * @param {string} externalApprovalDate - External approval date (optional, auto-saved)
  * @returns {Object} - {success: true/false, message: string}
  */
-function handleClientApproval(token, postId, decision, notes, commentType) {
+function handleClientApproval(token, postId, decision, notes, commentType, externalApprover, externalApprovalDate) {
   try {
     Logger.log('=== HANDLING CLIENT APPROVAL ===');
     Logger.log('Token: ' + token);
@@ -718,6 +806,8 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
     Logger.log('Decision: ' + decision);
     Logger.log('Notes: ' + notes);
     Logger.log('Comment Type: ' + commentType);
+    Logger.log('External Approver: ' + (externalApprover || '(none)'));
+    Logger.log('External Approval Date: ' + (externalApprovalDate || '(none)'));
 
     // Validate token
     const authorizedClient = validateClientToken(token);
@@ -736,6 +826,67 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
     }
 
     Logger.log('Post validated: ' + post.Post_Title + ', Client: ' + post.Client_ID);
+
+    // AUTO-SAVE: Save external approval data if provided (before processing approval decision)
+    if (externalApprover || externalApprovalDate) {
+      Logger.log('External approval data provided - auto-saving...');
+
+      try {
+        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+        const postsSheet = ss.getSheetByName('Posts');
+        const data = postsSheet.getDataRange().getValues();
+        const headers = data[0];
+
+        // Find the post row
+        let rowIndex = -1;
+        for (let i = 1; i < data.length; i++) {
+          if (data[i][0] === postId) {
+            rowIndex = i;
+            break;
+          }
+        }
+
+        if (rowIndex !== -1) {
+          // Find or create columns
+          let externalApproverCol = headers.indexOf('External_Approver');
+          let externalApprovalDateCol = headers.indexOf('External_Approval_Date');
+
+          if (externalApproverCol === -1) {
+            externalApproverCol = headers.length;
+            postsSheet.getRange(1, externalApproverCol + 1).setValue('External_Approver');
+          }
+
+          if (externalApprovalDateCol === -1) {
+            externalApprovalDateCol = headers.length + (externalApproverCol === headers.length ? 1 : 0);
+            postsSheet.getRange(1, externalApprovalDateCol + 1).setValue('External_Approval_Date');
+          }
+
+          // Save the values
+          if (externalApprover) {
+            postsSheet.getRange(rowIndex + 1, externalApproverCol + 1).setValue(externalApprover);
+            Logger.log('✅ Saved External_Approver: ' + externalApprover);
+          }
+
+          if (externalApprovalDate) {
+            // Parse date string and create UTC-normalized date to prevent timezone shifts
+            // Input format: YYYY-MM-DD from date picker
+            const dateParts = externalApprovalDate.split('-');
+            const year = parseInt(dateParts[0], 10);
+            const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
+            const day = parseInt(dateParts[2], 10);
+            // Create date at noon UTC to avoid timezone boundary issues
+            const dateObj = new Date(Date.UTC(year, month, day, 12, 0, 0));
+            postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue(dateObj);
+            Logger.log('✅ Saved External_Approval_Date: ' + externalApprovalDate + ' as ' + dateObj.toISOString());
+          }
+        } else {
+          Logger.log('⚠️ Could not find post row for external approval save');
+        }
+      } catch (externalApprovalError) {
+        Logger.log('⚠️ Failed to auto-save external approval: ' + externalApprovalError.message);
+        // Don't fail the entire operation if external approval save fails
+      }
+    }
 
     // Handle comment-only (no approval record needed for comments on non-Client_Review posts)
     if (decision === 'Comment') {
@@ -857,6 +1008,356 @@ function handleClientApproval(token, postId, decision, notes, commentType) {
     Logger.log('ERROR handling client approval: ' + e.message);
     Logger.log('Stack: ' + e.stack);
     return {success: false, error: 'An error occurred: ' + e.message};
+  }
+}
+
+/**
+ * Handle client edit submission (Client Admins only)
+ * Validates token, updates post, creates version record
+ */
+function handleClientEdit(token, postId, postCopy, hashtags) {
+  try {
+    Logger.log('=== HANDLING CLIENT EDIT ===');
+    Logger.log('Token: ' + token);
+    Logger.log('Post ID: ' + postId);
+    Logger.log('Post Copy length: ' + postCopy.length);
+    Logger.log('Hashtags: ' + hashtags);
+
+    // Validate token
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
+
+    // Verify client is an Admin
+    if (authorizedClient.Access_Level !== 'Admin') {
+      return {success: false, error: 'Only Client Admins can edit posts'};
+    }
+
+    // Get all posts accessible to this client
+    const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
+    const post = clientPosts.find(function(p) { return p.ID === postId; });
+
+    if (!post) {
+      return {success: false, error: 'Post not found or you do not have access to this post'};
+    }
+
+    Logger.log('Post validated: ' + post.Post_Title + ', Status: ' + post.Status);
+
+    // Only allow edits on posts in Client_Review status
+    if (post.Status !== 'Client_Review') {
+      return {success: false, error: 'Post must be in Client Review status to edit'};
+    }
+
+    // Get old post values for version tracking BEFORE update
+    const oldPostData = getPostById(postId);
+    if (!oldPostData || !oldPostData.success) {
+      return {success: false, error: 'Could not retrieve post data for version tracking'};
+    }
+
+    // Update ONLY Post_Copy and Hashtags in the Posts sheet (not all fields!)
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const postsSheet = ss.getSheetByName('Posts');
+    const data = postsSheet.getDataRange().getValues();
+    const headers = data[0];
+
+    // Find the post row
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === postId) {
+        rowIndex = i;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return {success: false, error: 'Post not found in sheet'};
+    }
+
+    // Find column indices for the fields we're updating
+    const postCopyCol = headers.indexOf('Post_Copy');
+    const hashtagsCol = headers.indexOf('Hashtags');
+    const modifiedDateCol = headers.indexOf('Modified_Date');
+
+    if (postCopyCol === -1 || hashtagsCol === -1) {
+      return {success: false, error: 'Could not find required columns in Posts sheet'};
+    }
+
+    // Update ONLY the specific columns (not the entire row!)
+    postsSheet.getRange(rowIndex + 1, postCopyCol + 1).setValue(postCopy);
+    postsSheet.getRange(rowIndex + 1, hashtagsCol + 1).setValue(hashtags);
+    if (modifiedDateCol !== -1) {
+      postsSheet.getRange(rowIndex + 1, modifiedDateCol + 1).setValue(new Date());
+    }
+
+    Logger.log('✅ Updated Post_Copy and Hashtags columns only');
+
+    // Create version record manually
+    const newPost = {
+      Post_Copy: postCopy,
+      Hashtags: hashtags,
+      Notes: oldPostData.post.Notes || ''
+    };
+
+    const oldPost = {
+      Post_Copy: oldPostData.post.Post_Copy || '',
+      Hashtags: oldPostData.post.Hashtags || '',
+      Notes: oldPostData.post.Notes || ''
+    };
+
+    Logger.log('Creating version record with changeType: Client_Edit');
+    Logger.log('Old Post_Copy: ' + (oldPost.Post_Copy ? oldPost.Post_Copy.substring(0, 50) + '...' : '(empty)'));
+    Logger.log('New Post_Copy: ' + (newPost.Post_Copy ? newPost.Post_Copy.substring(0, 50) + '...' : '(empty)'));
+    Logger.log('Old Hashtags: ' + oldPost.Hashtags);
+    Logger.log('New Hashtags: ' + newPost.Hashtags);
+
+    const versionResult = createPostVersion(postId, oldPost, newPost, 'Client_Edit');
+
+    if (versionResult.success) {
+      Logger.log('✅ Version record created successfully: ' + versionResult.versionId + ' (Version #' + versionResult.versionNumber + ')');
+    } else {
+      Logger.log('⚠️ WARNING: Failed to create version record: ' + versionResult.error);
+      // Don't fail the entire operation if version tracking fails
+    }
+
+    Logger.log('✅ Post updated successfully');
+
+    // Send notification to agency
+    Logger.log('Sending notification to agency');
+    try {
+      var subject = 'Client Edit: ' + post.Post_Title;
+      var body = 'A client admin has edited a post:\n\n' +
+                 'Post: ' + post.Post_Title + ' (ID: ' + postId + ')\n' +
+                 'Client: ' + authorizedClient.Email + '\n' +
+                 'Status: ' + post.Status + '\n\n' +
+                 'Changes made:\n' +
+                 '- Post Copy and/or Hashtags updated\n\n' +
+                 'Please review the changes in the version history.';
+
+      if (post.Created_By) {
+        MailApp.sendEmail(post.Created_By, subject, body);
+        Logger.log('✅ Email sent to post creator: ' + post.Created_By);
+      } else {
+        Logger.log('⚠️ No post creator email found');
+      }
+    } catch (emailError) {
+      Logger.log('❌ Failed to send email: ' + emailError.message);
+    }
+
+    return {
+      success: true,
+      message: 'Changes saved successfully. The agency will review your edits.'
+    };
+
+  } catch (e) {
+    Logger.log('❌ ERROR in handleClientEdit: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Handle external approval tracking (client admin only)
+ * Saves external approver name/title and approval date for client tracking
+ */
+function handleExternalApproval(token, postId, externalApprover, externalApprovalDate) {
+  try {
+    Logger.log('=== HANDLING EXTERNAL APPROVAL ===');
+    Logger.log('Token: ' + token);
+    Logger.log('Post ID: ' + postId);
+    Logger.log('External Approver: ' + externalApprover);
+    Logger.log('External Approval Date: ' + externalApprovalDate);
+
+    // Validate token
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
+
+    // Verify client is an Admin
+    if (authorizedClient.Access_Level !== 'Admin') {
+      return {success: false, error: 'Only Client Admins can record external approvals'};
+    }
+
+    // Get all posts accessible to this client
+    const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
+    const post = clientPosts.find(function(p) { return p.ID === postId; });
+
+    if (!post) {
+      return {success: false, error: 'Post not found or you do not have access to this post'};
+    }
+
+    Logger.log('Post validated: ' + post.Post_Title);
+
+    // Update External_Approver and External_Approval_Date in the Posts sheet
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const postsSheet = ss.getSheetByName('Posts');
+    const data = postsSheet.getDataRange().getValues();
+    const headers = data[0];
+
+    // Find the post row
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === postId) {
+        rowIndex = i;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return {success: false, error: 'Post not found in sheet'};
+    }
+
+    // Find column indices
+    let externalApproverCol = headers.indexOf('External_Approver');
+    let externalApprovalDateCol = headers.indexOf('External_Approval_Date');
+
+    // If columns don't exist, add them
+    if (externalApproverCol === -1) {
+      Logger.log('External_Approver column not found, adding it');
+      externalApproverCol = headers.length;
+      postsSheet.getRange(1, externalApproverCol + 1).setValue('External_Approver');
+    }
+
+    if (externalApprovalDateCol === -1) {
+      Logger.log('External_Approval_Date column not found, adding it');
+      externalApprovalDateCol = headers.length + (externalApproverCol === headers.length ? 1 : 0);
+      postsSheet.getRange(1, externalApprovalDateCol + 1).setValue('External_Approval_Date');
+    }
+
+    // Update the values
+    postsSheet.getRange(rowIndex + 1, externalApproverCol + 1).setValue(externalApprover);
+
+    // Parse and set date if provided
+    if (externalApprovalDate) {
+      // Parse date string and create UTC-normalized date to prevent timezone shifts
+      // Input format: YYYY-MM-DD from date picker
+      const dateParts = externalApprovalDate.split('-');
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
+      const day = parseInt(dateParts[2], 10);
+      // Create date at noon UTC to avoid timezone boundary issues
+      const dateObj = new Date(Date.UTC(year, month, day, 12, 0, 0));
+      postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue(dateObj);
+      Logger.log('External approval date normalized: ' + externalApprovalDate + ' → ' + dateObj.toISOString());
+    } else {
+      postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue('');
+    }
+
+    Logger.log('✅ External approval tracking updated successfully');
+
+    return {
+      success: true,
+      message: 'External approval tracking saved successfully'
+    };
+
+  } catch (e) {
+    Logger.log('❌ ERROR in handleExternalApproval: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
+  }
+}
+
+/**
+ * Get version history for a post (client portal access)
+ * Validates client has access to the post, then returns version history
+ */
+function getPostVersionsForClient(token, postId) {
+  try {
+    Logger.log('=== GETTING VERSION HISTORY FOR CLIENT ===');
+    Logger.log('Token: ' + token);
+    Logger.log('Post ID: ' + postId);
+
+    // Validate token
+    const authorizedClient = validateClientToken(token);
+    if (!authorizedClient) {
+      return {success: false, error: 'Invalid or expired access token'};
+    }
+
+    Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
+
+    // Get all posts accessible to this client
+    const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
+    const post = clientPosts.find(function(p) { return p.ID === postId; });
+
+    if (!post) {
+      return {success: false, error: 'Post not found or you do not have access to this post'};
+    }
+
+    Logger.log('Post validated: ' + post.Post_Title);
+
+    // Get version history using the existing getPostVersions function
+    const versions = getPostVersions(postId);
+
+    if (!versions || versions.length === 0) {
+      return {success: true, versions: []};
+    }
+
+    // Only show versions that should be visible to clients
+    // This includes: Client_Edit changes (always visible) and Agency_Edit changes marked "Share with Client"
+    // EXCLUDE: Versions created while post was in Draft or Internal_Review status
+    const clientFacingVersions = versions.filter(function(version) {
+      // Hide versions created while post was in Draft or Internal_Review status
+      if (version.Post_Status === 'Draft' || version.Post_Status === 'Internal_Review') {
+        Logger.log('CLIENT FILTER - Version ID: ' + version.ID + ' - HIDDEN (Post_Status: ' + version.Post_Status + ')');
+        return false;
+      }
+
+      // Show if it's a client edit OR if agency marked it to share with client
+      const isClientEdit = version.Change_Type === 'Client_Edit';
+      const isSharedByAgency = version.Share_With_Client === 'TRUE' || version.Share_With_Client === true;
+
+      // Diagnostic logging
+      Logger.log('CLIENT FILTER - Version ID: ' + version.ID);
+      Logger.log('  Post_Status: ' + version.Post_Status);
+      Logger.log('  Change_Type: ' + version.Change_Type);
+      Logger.log('  Share_With_Client: ' + version.Share_With_Client + ' (type: ' + typeof version.Share_With_Client + ')');
+      Logger.log('  isClientEdit: ' + isClientEdit);
+      Logger.log('  isSharedByAgency: ' + isSharedByAgency);
+      Logger.log('  RESULT: ' + (isClientEdit || isSharedByAgency));
+
+      return isClientEdit || isSharedByAgency;
+    });
+
+    // Filter out Notes changes - clients should not see internal notes
+    const clientVersions = clientFacingVersions.map(function(version) {
+      // Create a copy of the version object
+      var clientVersion = {};
+      for (var key in version) {
+        if (version.hasOwnProperty(key)) {
+          // Exclude Notes-related fields
+          if (key !== 'Notes_Old' && key !== 'Notes_New') {
+            clientVersion[key] = version[key];
+          }
+        }
+      }
+
+      // Remove 'Notes' from Changed_Fields list if present
+      if (clientVersion.Changed_Fields) {
+        var fields = clientVersion.Changed_Fields.split(',').map(function(f) { return f.trim(); });
+        fields = fields.filter(function(f) { return f !== 'Notes'; });
+        clientVersion.Changed_Fields = fields.join(',');
+      }
+
+      return clientVersion;
+    });
+
+    // Filter out versions that ONLY changed Notes (no client-visible changes)
+    const filteredVersions = clientVersions.filter(function(version) {
+      return version.Changed_Fields && version.Changed_Fields.length > 0;
+    });
+
+    Logger.log('✅ Returning ' + filteredVersions.length + ' version records (Notes excluded)');
+    return {success: true, versions: filteredVersions};
+
+  } catch (e) {
+    Logger.log('❌ ERROR in getPostVersionsForClient: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
   }
 }
 
@@ -1095,6 +1596,55 @@ function TEST_SIMPLE_EMAIL() {
   var currentUser = Session.getActiveUser().getEmail();
   Logger.log('Script is running as: ' + currentUser);
   Logger.log('Effective user: ' + Session.getEffectiveUser().getEmail());
+}
+
+/**
+ * FIX FUNCTION - Reset a post stuck in Client_Review back to Draft
+ * Run this for POST-042 or any post that needs to be reset after client requested changes
+ */
+function FIX_POST_042_RESET_TO_DRAFT() {
+  var postId = 'POST-042';
+
+  Logger.log('=== FIXING POST ' + postId + ' ===');
+
+  try {
+    // 1. Update post status to Draft
+    Logger.log('Step 1: Setting post status to Draft');
+    updatePostStatus(postId, 'Draft');
+    Logger.log('✅ Post status updated to Draft');
+
+    // 2. Find and update any pending client approval records to Changes_Requested
+    Logger.log('Step 2: Updating approval records');
+    var approvals = _readSheetAsObjects_('Post_Approvals', {
+      filterFn: function(a) {
+        return a.Post_ID === postId && (a.Approval_Stage === 'Client' || a.Approval_Stage === 'Client_Review') && a.Approval_Status === 'Pending';
+      }
+    });
+
+    Logger.log('Found ' + approvals.length + ' pending client approval(s)');
+
+    if (approvals.length > 0) {
+      approvals.forEach(function(approval) {
+        Logger.log('Updating approval: ' + approval.ID);
+        recordApprovalDecision(approval.ID, 'Changes_Requested', 'Reset to Draft for revisions');
+      });
+      Logger.log('✅ Approval records updated');
+    } else {
+      Logger.log('No pending approvals found - this is OK');
+    }
+
+    Logger.log('');
+    Logger.log('✅ POST-042 FIXED SUCCESSFULLY');
+    Logger.log('The post is now in Draft status and can be edited.');
+    Logger.log('After making changes, use "Re-submit for Client Review" with "Skip Internal" option.');
+
+    return {success: true, message: 'Post reset to Draft successfully'};
+
+  } catch (e) {
+    Logger.log('❌ ERROR: ' + e.message);
+    Logger.log('Stack: ' + e.stack);
+    return {success: false, error: e.message};
+  }
 
   // Check email quota
   var quotaRemaining = MailApp.getRemainingDailyQuota();
@@ -1238,9 +1788,10 @@ function getPostCommentsForClient(token, postId) {
     }
 
     // Get comments for this post from Comments sheet
+    // IMPORTANT: Filter out Internal_Note - clients should not see internal notes
     const comments = _readSheetAsObjects_('Comments', {
       filterFn: function(c) {
-        return c.Post_ID === postId;
+        return c.Post_ID === postId && c.Comment_Type !== 'Internal_Note';
       },
       sortFn: function(a, b) {
         var dateA = a.Created_Date ? new Date(a.Created_Date) : new Date(0);
@@ -1256,6 +1807,7 @@ function getPostCommentsForClient(token, postId) {
       }
     });
 
+    Logger.log('Returning ' + comments.length + ' comments (Internal Notes excluded)');
     return {success: true, comments: comments};
 
   } catch (e) {

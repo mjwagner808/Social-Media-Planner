@@ -5,6 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Content Review Portal</title>
   <style>
+    :root {
+      /* Anthology FINN Partners Brand Colors */
+      --brand-primary: #A4343A;
+      --brand-primary-dark: #8B2C31;
+      --brand-primary-light: #C74349;
+      --brand-secondary: #1a1a1a;
+      --brand-accent: #D84A50;
+
+      /* UI Colors */
+      --background: #F8F8F8;
+      --surface: #FFFFFF;
+      --border: #E0E0E0;
+      --text-primary: #1a1a1a;
+      --text-secondary: #5f6368;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -13,24 +29,25 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f8f9fa;
-      color: #202124;
+      background: var(--background);
+      color: var(--text-primary);
       line-height: 1.6;
     }
 
     .header {
-      background: white;
-      border-bottom: 1px solid #dadce0;
-      padding: 16px 24px;
+      background: var(--surface);
+      border-bottom: 3px solid var(--brand-primary);
+      padding: 20px 32px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
 
     .logo {
       font-size: 20px;
-      font-weight: 600;
-      color: #1a73e8;
+      font-weight: 700;
+      color: var(--brand-primary);
     }
 
     .client-info {
@@ -507,28 +524,37 @@
     .submit-btn {
       margin-top: 12px;
       padding: 10px 24px;
-      background: #1a73e8;
+      background: var(--brand-primary);
       color: white;
       border: none;
       border-radius: 4px;
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
+      transition: all 0.2s;
     }
 
     .submit-btn:hover {
-      background: #1765cc;
+      background: var(--brand-primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(164, 52, 58, 0.25);
     }
 
     .submit-btn:disabled {
       background: #dadce0;
       cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="logo">📅 Social Media Content Calendar</div>
+    <div class="logo">
+      <img src="https://lh3.googleusercontent.com/d/1PRMjStP9YDiq3t2HcomLxr7984AjEr1r" alt="Anthology FINN Partners" style="height: 40px; width: auto; object-fit: contain; vertical-align: middle; margin-right: 8px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';">
+      <span style="display: none; font-weight: 700;">Anthology FINN Partners</span>
+      <span style="font-weight: 400; color: var(--text-secondary);">| Content Review Portal</span>
+    </div>
     <div style="display: flex; align-items: center; gap: 16px;">
       <button id="analyticsBtn" onclick="openClientAnalytics()"
               style="display: none; padding: 8px 16px; background: #9334e9; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">
@@ -656,6 +682,22 @@
               Loading reviewers...
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Dashboard Modal -->
+  <div id="analyticsModal" class="modal-overlay" onclick="closeClientAnalytics(event)">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 1200px;">
+      <div class="modal-header">
+        <h2>📊 Your Analytics</h2>
+        <button type="button" class="modal-close" onclick="closeClientAnalytics()">&times;</button>
+      </div>
+      <div class="modal-body" id="analyticsContent">
+        <div style="text-align: center; padding: 60px 20px; color: #9aa0a6;">
+          <div class="spinner"></div>
+          <p style="margin-top: 24px;">Loading analytics...</p>
         </div>
       </div>
     </div>
@@ -954,6 +996,26 @@
 
       const modal = document.getElementById('postModal');
       const modalTitle = document.getElementById('modalTitle');
+
+      modalTitle.textContent = post.Post_Title || 'Untitled Post';
+
+      // Build modal content using the helper function
+      buildPostDetailHTML(post);
+
+      // Show modal
+      modal.classList.add('active');
+
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    // OLD CODE - keeping for reference but now using buildPostDetailHTML helper
+    function openPostDetail_OLD(postId) {
+      const post = allPosts.find(p => p.ID === postId);
+      if (!post) return;
+
+      const modal = document.getElementById('postModal');
+      const modalTitle = document.getElementById('modalTitle');
       const modalBody = document.getElementById('modalBody');
 
       modalTitle.textContent = post.Post_Title || 'Untitled Post';
@@ -1050,8 +1112,82 @@
         html += '</div>';
       }
 
+      // Version history section (for change tracking)
+      html += '<div style="border-top: 1px solid #dadce0; padding-top: 16px; margin-top: 16px;">';
+      html += '<h3 style="margin-bottom: 12px;">📝 Change History</h3>';
+      html += '<div id="versionHistory">';
+      html += '<div style="padding: 12px; text-align: center; color: #5f6368;">Loading change history...</div>';
+      html += '</div>';
+      html += '</div>';
+
       // Comment history section (will be loaded dynamically)
       html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
+
+      // Edit button for Client Admins (only in Client_Review status)
+      if (status === 'Client_Review' && clientInfo && clientInfo.Is_Admin) {
+        html += '<div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #dadce0;">';
+        html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" id="editPostBtn" style="padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">✎ Edit Post Content</button>';
+        html += '<span style="margin-left: 12px; font-size: 12px; color: #5f6368;">Make direct edits to post copy and hashtags</span>';
+        html += '</div>';
+
+        // Edit form (initially hidden)
+        html += '<div id="editForm_' + postId + '" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 24px;">';
+        html += '<h3 style="margin: 0 0 16px 0; font-size: 16px; color: #202124;">Edit Post Content</h3>';
+        html += '<div style="margin-bottom: 16px;">';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 8px; color: #5f6368; font-size: 14px;">Post Copy</label>';
+        html += '<textarea id="editPostCopy_' + postId + '" style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;">' + escapeHtml(post.Post_Copy || '') + '</textarea>';
+        html += '</div>';
+        html += '<div style="margin-bottom: 16px;">';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 8px; color: #5f6368; font-size: 14px;">Hashtags</label>';
+        html += '<input type="text" id="editHashtags_' + postId + '" value="' + escapeHtml(post.Hashtags || '') + '" style="width: 100%; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; font-size: 14px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '<div style="display: flex; gap: 12px;">';
+        html += '<button type="button" onclick="saveClientEdit(\'' + postId + '\')" style="padding: 10px 20px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">💾 Save Changes</button>';
+        html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" style="padding: 10px 20px; background: #dadce0; color: #202124; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">Cancel</button>';
+        html += '</div>';
+        html += '<p style="margin: 12px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">💡 Your changes will be tracked and will require agency review before being finalized.</p>';
+        html += '</div>';
+      }
+
+      // External Approval Tracking (optional for clients)
+      html += '<div style="border-top: 1px solid #dadce0; padding-top: 24px; margin-top: 24px;">';
+      html += '<h3 style="margin-bottom: 12px;">✓ External Approval Tracking (Optional)</h3>';
+      html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">';
+      html += '<p style="margin: 0 0 12px 0; font-size: 13px; color: #5f6368;">Use this section to record when your manager, supervisor, or other stakeholder approves this post.</p>';
+
+      // Show current external approval if exists
+      if (post.External_Approver || post.External_Approval_Date) {
+        html += '<div style="background: #e8f5e9; padding: 12px; border-radius: 4px; border-left: 3px solid #34a853; margin-bottom: 12px;">';
+        html += '<p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Recorded</p>';
+        if (post.External_Approver) {
+          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approved by: ' + escapeHtml(post.External_Approver) + '</p>';
+        }
+        if (post.External_Approval_Date) {
+          var externalDate = new Date(post.External_Approval_Date);
+          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approval date: ' + externalDate.toLocaleDateString() + '</p>';
+        }
+        html += '</div>';
+      }
+
+      // Form to record/update external approval (only for Client Admins)
+      if (clientInfo && clientInfo.Is_Admin) {
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">';
+        html += '<div>';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approver Name/Title</label>';
+        html += '<input type="text" id="externalApprover_' + postId + '" value="' + escapeHtml(post.External_Approver || '') + '" placeholder="e.g., Tammy Johnson, VP" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '<div>';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approval Date</label>';
+        html += '<input type="date" id="externalApprovalDate_' + postId + '" value="' + (post.External_Approval_Date || '') + '" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '</div>';
+        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 8px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save External Approval</button>';
+      } else {
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
+      }
+
+      html += '</div>';
+      html += '</div>';
 
       // Client actions section
       html += '<div class="approval-actions">';
@@ -1059,23 +1195,16 @@
 
       // For Client_Review, show approval buttons
       if (status === 'Client_Review') {
-        html += '<div class="action-buttons">';
+        html += '<div class="comment-section">';
+        html += '<label for="commentText">Comments/Feedback</label>';
+        html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
+        html += '</div>';
+        html += '<div class="action-buttons" style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">';
         html += '<button type="button" class="action-btn approve" onclick="approvePost(\'' + postId + '\')">✓ Approve</button>';
         html += '<button type="button" class="action-btn request-changes" onclick="requestChanges(\'' + postId + '\')">✎ Request Changes</button>';
+        html += '<button type="button" class="action-btn keep-for-review" onclick="addComment(\'' + postId + '\')" style="background: #1a73e8;">💬 Keep for Review</button>';
         html += '</div>';
-        html += '<div class="comment-section">';
-        html += '<label for="commentType">Comment Type</label>';
-        html += '<select id="commentType" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
-        html += '<option value="">General Comment</option>';
-        html += '<option value="Question">Question</option>';
-        html += '<option value="Revision_Request">Revision Request</option>';
-        html += '<option value="Approval_Feedback">Approval Feedback</option>';
-        html += '</select>';
-        html += '<label for="commentText">Comments</label>';
-        html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
-        html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment Only</button>';
-        html += '</div>';
-        html += '<p style="font-size: 12px; color: #5f6368; margin-top: 8px;">💡 Tip: If approval buttons aren\'t working, use "Submit Comment Only" to share your feedback with the team.</p>';
+        html += '<p style="font-size: 12px; color: #5f6368; margin-top: 8px;">💡 Click "Approve" to approve, "Request Changes" to send back for revisions, or "Keep for Review" to add comments while keeping the post on your dashboard.</p>';
       } else {
         // For all other statuses, show comment-only section with status explanation
         var statusMessages = {
@@ -1186,6 +1315,124 @@
       document.body.appendChild(script);
     }
 
+    /**
+     * Load version history for a post
+     */
+    function loadVersionHistory(postId) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+      const versionHistoryDiv = document.getElementById('versionHistory');
+
+      if (!versionHistoryDiv) return;
+
+      versionHistoryDiv.innerHTML = '<div style="padding: 12px; text-align: center; color: #5f6368;">Loading change history...</div>';
+
+      // Create JSONP callback
+      const callbackName = 'versionsCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        if (data.success && data.versions && data.versions.length > 0) {
+          displayVersionHistory(data.versions);
+        } else if (data.success) {
+          versionHistoryDiv.innerHTML = '<div style="padding: 12px; text-align: center; color: #5f6368; font-style: italic;">No changes tracked yet.</div>';
+        } else {
+          versionHistoryDiv.innerHTML = '<div style="padding: 12px; text-align: center; color: #ea4335;">Error loading change history</div>';
+        }
+
+        // Cleanup
+        delete window[callbackName];
+        const script = document.getElementById('versionsScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'versionsScript';
+      script.src = API_URL + '?action=getPostVersions' +
+        '&token=' + encodeURIComponent(token) +
+        '&postId=' + encodeURIComponent(postId) +
+        '&callback=' + callbackName;
+      script.onerror = function() {
+        versionHistoryDiv.innerHTML = '';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Display version history in the modal
+     */
+    function displayVersionHistory(versions) {
+      const container = document.getElementById('versionHistory');
+      if (!container) return;
+
+      let html = '';
+
+      versions.forEach(function(version, index) {
+        const date = new Date(version.Changed_Date);
+        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        const changedBy = version.Changed_By || 'Unknown';
+        const changeType = version.Change_Type || 'Agency_Edit';
+        const changedFields = version.Changed_Fields ? version.Changed_Fields.split(',') : [];
+
+        const borderColor = (changeType === 'Client_Edit') ? '#1a73e8' : '#9334e9';
+        const badgeColor = (changeType === 'Client_Edit') ? '#e8f0fe' : '#f3e8fd';
+        const badgeTextColor = (changeType === 'Client_Edit') ? '#1a73e8' : '#9334e9';
+
+        html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid ' + borderColor + ';">';
+
+        // Header
+        html += '<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">';
+        html += '<div>';
+        html += '<strong style="font-size: 14px;">Version ' + version.Version_Number + '</strong>';
+        html += '<span style="margin-left: 8px; padding: 2px 8px; background: ' + badgeColor + '; color: ' + badgeTextColor + '; border-radius: 12px; font-size: 11px; font-weight: 500;">';
+        html += (changeType === 'Client_Edit' ? 'Client Edit' : 'Agency Edit');
+        html += '</span>';
+        html += '</div>';
+        html += '<span style="font-size: 12px; color: #5f6368;">' + dateStr + '</span>';
+        html += '</div>';
+
+        // Changed by
+        html += '<div style="font-size: 13px; color: #5f6368; margin-bottom: 8px;">Changed by: ' + escapeHtml(changedBy) + '</div>';
+
+        // Fields changed
+        html += '<div style="font-size: 12px; color: #5f6368; margin-bottom: 12px;">Fields: ' + changedFields.join(', ') + '</div>';
+
+        // Show changes for each field
+        changedFields.forEach(function(field) {
+          const fieldClean = field.trim();
+          const oldValue = version[fieldClean + '_Old'] || '';
+          const newValue = version[fieldClean + '_New'] || '';
+
+          if (oldValue || newValue) {
+            html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #dadce0;">';
+            html += '<div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: #202124;">' + fieldClean.replace(/_/g, ' ') + ':</div>';
+
+            // Old value
+            html += '<div style="margin-bottom: 6px;">';
+            html += '<div style="font-size: 11px; color: #ea4335; margin-bottom: 2px;">- Old:</div>';
+            html += '<div style="background: #fce8e6; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">';
+            html += oldValue ? escapeHtml(oldValue) : '<em style="color: #9aa0a6;">(empty)</em>';
+            html += '</div>';
+            html += '</div>';
+
+            // New value
+            html += '<div>';
+            html += '<div style="font-size: 11px; color: #34a853; margin-bottom: 2px;">+ New:</div>';
+            html += '<div style="background: #e6f4ea; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">';
+            html += newValue ? escapeHtml(newValue) : '<em style="color: #9aa0a6;">(empty)</em>';
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+          }
+        });
+
+        html += '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
     function closePostDetail(event) {
       if (event && event.target.closest('.modal-content')) return;
 
@@ -1238,9 +1485,29 @@
     }
 
     function submitApprovalDecision(postId, decision, notes, commentType) {
+      // Prevent duplicate submissions
+      if (window.isSubmittingApproval) {
+        return;
+      }
+      window.isSubmittingApproval = true;
+
       // Get current token from server-side injected variable or URL parameter (fallback)
       const urlParams = new URLSearchParams(window.location.search);
       const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // AUTO-SAVE: Check if external approval fields are filled and save them first
+      const externalApproverField = document.getElementById('externalApprover_' + postId);
+      const externalApprovalDateField = document.getElementById('externalApprovalDate_' + postId);
+
+      let externalApprover = '';
+      let externalApprovalDate = '';
+
+      if (externalApproverField) {
+        externalApprover = externalApproverField.value.trim();
+      }
+      if (externalApprovalDateField) {
+        externalApprovalDate = externalApprovalDateField.value;
+      }
 
       // Show loading state
       const modal = document.getElementById('postModal');
@@ -1271,10 +1538,14 @@
           // Error - show message and allow retry
           modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>' +
             (data.error || 'Failed to submit your decision. Please try again.') +
-            '</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
+            '</p><p style="margin-top: 16px;">' +
+            '<button type="button" onclick="submitApprovalDecision(\'' + postId + '\', \'' + decision + '\', \'' + (notes || '').replace(/'/g, "\\'") + '\', \'' + (commentType || '') + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+            '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+            '</p></div>';
         }
 
         // Cleanup
+        window.isSubmittingApproval = false;
         delete window[callbackName];
         const script = document.getElementById('approvalScript');
         if (script) document.body.removeChild(script);
@@ -1289,9 +1560,15 @@
         '&decision=' + encodeURIComponent(decision) +
         '&notes=' + encodeURIComponent(notes) +
         '&commentType=' + encodeURIComponent(commentType || '') +
+        '&externalApprover=' + encodeURIComponent(externalApprover) +
+        '&externalApprovalDate=' + encodeURIComponent(externalApprovalDate) +
         '&callback=' + callbackName;
       script.onerror = function() {
-        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>Failed to connect to server. Please check your connection and try again.</p><p style="margin-top: 16px;"><button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn">Close</button></p></div>';
+        window.isSubmittingApproval = false;
+        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3><p>Failed to connect to server. Please check your connection and try again.</p><p style="margin-top: 16px;">' +
+          '<button type="button" onclick="submitApprovalDecision(\'' + postId + '\', \'' + decision + '\', \'' + (notes || '').replace(/'/g, "\\'") + '\', \'' + (commentType || '') + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+          '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+          '</p></div>';
         delete window[callbackName];
       };
       document.body.appendChild(script);
@@ -1641,6 +1918,659 @@
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+    }
+
+    /**
+     * Open Client Analytics
+     */
+    function openClientAnalytics() {
+      var modal = document.getElementById('analyticsModal');
+      modal.classList.add('active');
+
+      // Get token
+      var urlParams = new URLSearchParams(window.location.search);
+      var token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Load analytics using JSONP
+      var callbackName = 'analyticsCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        if (data.success) {
+          renderClientAnalytics(data.metrics);
+        } else {
+          document.getElementById('analyticsContent').innerHTML =
+            '<div style="text-align: center; padding: 60px 20px; color: #ea4335;">' +
+            '<p style="font-size: 18px; margin-bottom: 12px;">❌ Error loading analytics</p>' +
+            '<p style="color: #5f6368;">' + (data.error || 'Unknown error') + '</p>' +
+            '</div>';
+        }
+        delete window[callbackName];
+      };
+
+      var script = document.createElement('script');
+      script.src = API_URL + '?action=getClientAnalyticsData&token=' + encodeURIComponent(token) + '&callback=' + callbackName;
+      script.onerror = function() {
+        document.getElementById('analyticsContent').innerHTML =
+          '<div style="text-align: center; padding: 60px 20px; color: #ea4335;">' +
+          '<p style="font-size: 18px; margin-bottom: 12px;">❌ Connection error</p>' +
+          '<p style="color: #5f6368;">Failed to load analytics. Please try again.</p>' +
+          '</div>';
+        delete window[callbackName];
+      };
+      document.head.appendChild(script);
+    }
+
+    /**
+     * Close Client Analytics
+     */
+    function closeClientAnalytics(event) {
+      if (event && event.target !== event.currentTarget) return;
+      var modal = document.getElementById('analyticsModal');
+      modal.classList.remove('active');
+    }
+
+    /**
+     * Reload post after edit to show updated content
+     */
+    function reloadPostAfterEdit(postId) {
+      console.log('reloadPostAfterEdit called for:', postId);
+
+      // Show loading state
+      const modalBody = document.getElementById('modalBody');
+      modalBody.innerHTML = '<div style="padding: 40px; text-align: center;"><div class="spinner"></div><p style="margin-top: 16px;">Reloading post...</p></div>';
+
+      // Get token
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback to reload all data
+      const callbackName = 'reloadCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Reload API Response:', data);
+
+        if (data.success) {
+          // Update local data
+          clientInfo = data.clientInfo;
+          allPosts = data.posts || [];
+          filteredPosts = allPosts;
+
+          console.log('Reloaded posts count:', allPosts.length);
+
+          // Re-render calendar
+          renderCalendar();
+          console.log('Calendar re-rendered');
+
+          // Find the updated post
+          const updatedPost = allPosts.find(function(p) { return p.ID === postId; });
+          console.log('Updated post found:', updatedPost ? updatedPost.Post_Title : 'NOT FOUND');
+
+          if (updatedPost) {
+            // Keep modal open and reload the post detail
+            const modal = document.getElementById('postModal');
+            const modalTitle = document.getElementById('modalTitle');
+
+            // Update the modal content directly instead of closing/reopening
+            modalTitle.textContent = updatedPost.Post_Title || 'Untitled Post';
+
+            // Rebuild the modal body with the updated post data
+            buildPostDetailHTML(updatedPost);
+
+            console.log('Post detail refreshed in modal');
+          } else {
+            closePostDetail();
+            alert('Post updated successfully. However, it may no longer be visible in your view (status may have changed).');
+          }
+        } else {
+          closePostDetail();
+          alert('Failed to reload post data: ' + (data.error || 'Unknown error'));
+        }
+
+        delete window[callbackName];
+        const script = document.getElementById('reloadScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'reloadScript';
+      script.src = API_URL + '?action=getClientData&token=' + encodeURIComponent(token) + '&callback=' + callbackName;
+      script.onerror = function() {
+        closePostDetail();
+        alert('Failed to reload data. Please refresh the page.');
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Build post detail HTML (extracted from openPostDetail for reuse)
+     */
+    function buildPostDetailHTML(post) {
+      const modalBody = document.getElementById('modalBody');
+      const postId = post.ID;
+
+      // Build modal content
+      let html = '';
+
+      // Status badge
+      const status = (post.Status || 'Draft').replace(/ /g, '_');
+      html += '<div class="modal-field">';
+      html += '<div class="modal-field-label">Status</div>';
+      html += '<div class="modal-field-value"><span class="status-badge ' + status + '">' + (post.Status || 'Draft') + '</span></div>';
+      html += '</div>';
+
+      // Scheduled date
+      if (post.Scheduled_Date) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Scheduled Date</div>';
+        html += '<div class="modal-field-value">' + new Date(post.Scheduled_Date).toLocaleDateString() + '</div>';
+        html += '</div>';
+      }
+
+      // Post copy
+      if (post.Post_Copy) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Post Copy</div>';
+        html += '<div class="modal-field-value">' + escapeHtml(post.Post_Copy).replace(/\n/g, '<br>') + '</div>';
+        html += '</div>';
+      }
+
+      // Hashtags
+      if (post.Hashtags) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Hashtags</div>';
+        html += '<div class="modal-field-value">' + escapeHtml(post.Hashtags) + '</div>';
+        html += '</div>';
+      }
+
+      // Link URL
+      if (post.Link_URL) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Link</div>';
+        html += '<div class="modal-field-value"><a href="' + escapeHtml(post.Link_URL) + '" target="_blank">' + escapeHtml(post.Link_URL) + '</a></div>';
+        html += '</div>';
+      }
+
+      // Media - Display all platform images
+      if (post.platforms && post.platforms.length > 0) {
+        html += '<div class="modal-field">';
+        html += '<div class="modal-field-label">Media</div>';
+        html += '<div class="modal-field-value" style="display: flex; flex-direction: column; gap: 16px;">';
+
+        // Loop through all platforms
+        post.platforms.forEach(function(platform) {
+          html += '<div style="border: 1px solid #dadce0; border-radius: 4px; padding: 12px;">';
+          html += '<div style="font-weight: 500; color: #5f6368; margin-bottom: 8px; font-size: 13px;">' + escapeHtml(platform.platform) + '</div>';
+
+          if (platform.isCarousel) {
+            // Carousel - show link to Box
+            html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 3px solid #1a73e8;">';
+            html += '<p style="margin: 0 0 8px 0; font-size: 13px; color: #5f6368;">📸 Carousel (Multiple Images)</p>';
+            html += '<a href="' + escapeHtml(platform.url) + '" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 12px; word-break: break-all;">View in Box →</a>';
+            html += '</div>';
+          } else {
+            // Single image - try to display with Box URL conversion
+            var embedUrl = platform.url.includes('box.com/s/')
+              ? platform.url.replace('/s/', '/shared/static/')
+              : platform.url;
+
+            html += '<img src="' + escapeHtml(embedUrl) + '" style="max-width: 100%; max-height: 300px; border-radius: 4px; display: block;" onerror="this.style.display=\'none\'; this.nextElementSibling.style.display=\'block\';">';
+            html += '<div style="display: none; background: #f8f9fa; padding: 12px; border-radius: 4px;">';
+            html += '<p style="margin: 0 0 8px 0; color: #5f6368; font-size: 12px;">Image preview unavailable</p>';
+            html += '<a href="' + escapeHtml(platform.url) + '" target="_blank" style="color: #1a73e8; text-decoration: none; font-size: 13px;">View in Box →</a>';
+            html += '</div>';
+          }
+
+          html += '</div>';
+        });
+
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Share with Reviewers section (only for client admins)
+      if (clientInfo && clientInfo.Is_Admin) {
+        html += '<div id="shareReviewers" style="margin-top: 24px; border-top: 1px solid #dadce0; padding-top: 24px;">';
+        html += '<h3 style="margin-bottom: 12px;">👥 Share with Reviewers</h3>';
+        html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px;">';
+        html += '<div id="reviewerCheckboxes" style="margin-bottom: 12px;">';
+        html += '<div style="text-align: center; padding: 12px; color: #5f6368;">Loading reviewers...</div>';
+        html += '</div>';
+        html += '<div style="font-size: 12px; color: #5f6368; font-style: italic;">Select which reviewers should have access to this post. Unchecked reviewers will not see this post.</div>';
+        html += '</div>';
+        html += '</div>';
+      }
+
+      // Version history section (for change tracking)
+      html += '<div style="border-top: 1px solid #dadce0; padding-top: 16px; margin-top: 16px;">';
+      html += '<h3 style="margin-bottom: 12px;">📝 Change History</h3>';
+      html += '<div id="versionHistory">';
+      html += '<div style="padding: 12px; text-align: center; color: #5f6368;">Loading change history...</div>';
+      html += '</div>';
+      html += '</div>';
+
+      // Comment history section (will be loaded dynamically)
+      html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
+
+      // Edit button for Client Admins (only in Client_Review status)
+      if (status === 'Client_Review' && clientInfo && clientInfo.Is_Admin) {
+        html += '<div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #dadce0;">';
+        html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" id="editPostBtn" style="padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">✎ Edit Post Content</button>';
+        html += '<span style="margin-left: 12px; font-size: 12px; color: #5f6368;">Make direct edits to post copy and hashtags</span>';
+        html += '</div>';
+
+        // Edit form (initially hidden)
+        html += '<div id="editForm_' + postId + '" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 24px;">';
+        html += '<h3 style="margin: 0 0 16px 0; font-size: 16px; color: #202124;">Edit Post Content</h3>';
+        html += '<div style="margin-bottom: 16px;">';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 8px; color: #5f6368; font-size: 14px;">Post Copy</label>';
+        html += '<textarea id="editPostCopy_' + postId + '" style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; font-size: 14px; resize: vertical; box-sizing: border-box;">' + escapeHtml(post.Post_Copy || '') + '</textarea>';
+        html += '</div>';
+        html += '<div style="margin-bottom: 16px;">';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 8px; color: #5f6368; font-size: 14px;">Hashtags</label>';
+        html += '<input type="text" id="editHashtags_' + postId + '" value="' + escapeHtml(post.Hashtags || '') + '" style="width: 100%; padding: 12px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; font-size: 14px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '<div style="display: flex; gap: 12px;">';
+        html += '<button type="button" onclick="saveClientEdit(\'' + postId + '\')" style="padding: 10px 20px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">💾 Save Changes</button>';
+        html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" style="padding: 10px 20px; background: #dadce0; color: #202124; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">Cancel</button>';
+        html += '</div>';
+        html += '<p style="margin: 12px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">💡 Your changes will be tracked and will require agency review before being finalized.</p>';
+        html += '</div>';
+      }
+
+      // External Approval Tracking (optional for clients)
+      html += '<div style="border-top: 1px solid #dadce0; padding-top: 24px; margin-top: 24px;">';
+      html += '<h3 style="margin-bottom: 12px;">✓ External Approval Tracking (Optional)</h3>';
+      html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">';
+      html += '<p style="margin: 0 0 12px 0; font-size: 13px; color: #5f6368;">Use this section to record when your manager, supervisor, or other stakeholder approves this post.</p>';
+
+      // Show current external approval if exists
+      if (post.External_Approver || post.External_Approval_Date) {
+        html += '<div style="background: #e8f5e9; padding: 12px; border-radius: 4px; border-left: 3px solid #34a853; margin-bottom: 12px;">';
+        html += '<p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Recorded</p>';
+        if (post.External_Approver) {
+          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approved by: ' + escapeHtml(post.External_Approver) + '</p>';
+        }
+        if (post.External_Approval_Date) {
+          var externalDate = new Date(post.External_Approval_Date);
+          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approval date: ' + externalDate.toLocaleDateString() + '</p>';
+        }
+        html += '</div>';
+      }
+
+      // Form to record/update external approval (only for Client Admins)
+      if (clientInfo && clientInfo.Is_Admin) {
+        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">';
+        html += '<div>';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approver Name/Title</label>';
+        html += '<input type="text" id="externalApprover_' + postId + '" value="' + escapeHtml(post.External_Approver || '') + '" placeholder="e.g., Tammy Johnson, VP" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '<div>';
+        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approval Date</label>';
+        html += '<input type="date" id="externalApprovalDate_' + postId + '" value="' + (post.External_Approval_Date || '') + '" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        html += '</div>';
+        html += '</div>';
+        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 8px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save External Approval</button>';
+      } else {
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
+      }
+
+      html += '</div>';
+      html += '</div>';
+
+      // Client actions section
+      html += '<div class="approval-actions">';
+      html += '<h3>' + (status === 'Client_Review' ? 'Your Review' : 'Add Comment') + '</h3>';
+
+      // For Client_Review, show approval buttons
+      if (status === 'Client_Review') {
+        html += '<div class="comment-section">';
+        html += '<label for="commentText">Comments/Feedback</label>';
+        html += '<textarea id="commentText" placeholder="Add your feedback or suggestions..."></textarea>';
+        html += '</div>';
+        html += '<div class="action-buttons" style="margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap;">';
+        html += '<button type="button" class="action-btn approve" onclick="approvePost(\'' + postId + '\')">✓ Approve</button>';
+        html += '<button type="button" class="action-btn request-changes" onclick="requestChanges(\'' + postId + '\')">✎ Request Changes</button>';
+        html += '<button type="button" class="action-btn keep-for-review" onclick="addComment(\'' + postId + '\')" style="background: #1a73e8;">💬 Keep for Review</button>';
+        html += '</div>';
+        html += '<p style="font-size: 12px; color: #5f6368; margin-top: 8px;">💡 Click "Approve" to approve, "Request Changes" to send back for revisions, or "Keep for Review" to add comments while keeping the post on your dashboard.</p>';
+      } else {
+        // For all other statuses, show comment-only section with status explanation
+        var statusMessages = {
+          'Draft': 'This post is in Draft status. The team is still working on it.',
+          'Internal_Review': 'This post is currently in internal review. It will be sent to you for approval once internal review is complete.',
+          'Approved': 'This post has been approved and is ready for publishing.',
+          'Scheduled': 'This post is scheduled for publication.',
+          'Published': 'This post has been published.'
+        };
+        var statusMessage = statusMessages[status] || 'This post is currently in ' + status + ' status.';
+
+        html += '<div style="background: #e8f0fe; padding: 12px; border-radius: 4px; border-left: 3px solid #1a73e8; margin-bottom: 16px;">';
+        html += '<p style="margin: 0; font-size: 13px; color: #1967d2;"><strong>ℹ️ Status: ' + status.replace('_', ' ') + '</strong></p>';
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368;">' + statusMessage + ' You can still add comments below.</p>';
+        html += '</div>';
+
+        html += '<div class="comment-section">';
+        html += '<label for="commentType">Comment Type</label>';
+        html += '<select id="commentType" style="width: 100%; padding: 8px; margin-bottom: 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;">';
+        html += '<option value="">General Comment</option>';
+        html += '<option value="Question">Question</option>';
+        html += '<option value="Revision_Request">Revision Request</option>';
+        html += '<option value="Approval_Feedback">Approval Feedback</option>';
+        html += '<option value="Internal_Note">Internal Note</option>';
+        html += '</select>';
+        html += '<label for="commentText">Your Comments</label>';
+        html += '<textarea id="commentText" placeholder="Share your thoughts or questions about this post..."></textarea>';
+        html += '<button type="button" class="submit-btn" onclick="addComment(\'' + postId + '\')">Submit Comment</button>';
+        html += '</div>';
+      }
+
+      html += '</div>';
+
+      modalBody.innerHTML = html;
+
+      // Load version history
+      loadVersionHistory(postId);
+
+      // Load comment history
+      loadCommentHistory(postId);
+
+      // Load reviewer checkboxes for client admins
+      if (clientInfo && clientInfo.Is_Admin) {
+        loadReviewerCheckboxes(postId);
+      }
+    }
+
+    /**
+     * Toggle edit mode for client admins
+     */
+    function toggleEditMode(postId) {
+      const editForm = document.getElementById('editForm_' + postId);
+      const editBtn = document.getElementById('editPostBtn');
+
+      if (editForm.style.display === 'none') {
+        editForm.style.display = 'block';
+        if (editBtn) editBtn.style.display = 'none';
+      } else {
+        editForm.style.display = 'none';
+        if (editBtn) editBtn.style.display = 'inline-block';
+      }
+    }
+
+    /**
+     * Save client edit via JSONP
+     */
+    function saveClientEdit(postId) {
+      // Prevent duplicate submissions
+      if (window.isSubmittingEdit) {
+        return;
+      }
+
+      const postCopy = document.getElementById('editPostCopy_' + postId).value;
+      const hashtags = document.getElementById('editHashtags_' + postId).value;
+
+      if (!postCopy.trim()) {
+        alert('Post copy cannot be empty.');
+        return;
+      }
+
+      if (!confirm('Save your changes?\n\nYour edits will be tracked and will require agency review.')) {
+        return;
+      }
+
+      window.isSubmittingEdit = true;
+
+      // Show loading state
+      const modal = document.getElementById('postModal');
+      const modalBody = document.getElementById('modalBody');
+      const originalContent = modalBody.innerHTML;
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Saving your changes...</p></div>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'clientEditCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('Client Edit API Response:', data);
+
+        if (data.success) {
+          // Show success message and reload the post to show updated content
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+            '<h3 style="color: #34a853; margin-bottom: 16px;">✓ Changes Saved!</h3>' +
+            '<p>Your edits have been saved and tracked.</p>' +
+            '<p style="margin-top: 8px; color: #5f6368; font-size: 14px;">The post will reload with your changes. You can then approve or request additional changes.</p>' +
+            '<p style="margin-top: 16px;"><button type="button" onclick="reloadPostAfterEdit(\'' + postId + '\');" class="submit-btn">Continue</button></p>' +
+            '</div>';
+        } else {
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+            '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
+            '<p>' + (data.error || 'Failed to save changes. Please try again.') + '</p>' +
+            '<p style="margin-top: 16px;">' +
+            '<button type="button" onclick="saveClientEdit(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+            '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+            '</p></div>';
+        }
+
+        window.isSubmittingEdit = false;
+        delete window[callbackName];
+        const script = document.getElementById('clientEditScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'clientEditScript';
+      script.src = API_URL + '?action=saveClientEdit' +
+        '&token=' + encodeURIComponent(token) +
+        '&postId=' + encodeURIComponent(postId) +
+        '&postCopy=' + encodeURIComponent(postCopy) +
+        '&hashtags=' + encodeURIComponent(hashtags) +
+        '&callback=' + callbackName;
+      script.onerror = function() {
+        window.isSubmittingEdit = false;
+        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+          '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
+          '<p>Failed to connect to server. Please check your connection and try again.</p>' +
+          '<p style="margin-top: 16px;">' +
+          '<button type="button" onclick="saveClientEdit(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+          '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+          '</p></div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Save external approval tracking (for Client Admins)
+     */
+    function saveExternalApproval(postId) {
+      // Prevent duplicate submissions
+      if (window.isSubmittingExternalApproval) {
+        return;
+      }
+
+      const externalApprover = document.getElementById('externalApprover_' + postId).value.trim();
+      const externalApprovalDate = document.getElementById('externalApprovalDate_' + postId).value;
+
+      // At least one field must be filled
+      if (!externalApprover && !externalApprovalDate) {
+        alert('Please enter at least an approver name or approval date.');
+        return;
+      }
+
+      window.isSubmittingExternalApproval = true;
+
+      // Show loading state
+      const modalBody = document.getElementById('modalBody');
+      const originalContent = modalBody.innerHTML;
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Saving external approval...</p></div>';
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = '<?= accessToken ?>' || urlParams.get('token');
+
+      // Create JSONP callback
+      const callbackName = 'externalApprovalCallback_' + Date.now();
+      window[callbackName] = function(data) {
+        console.log('External Approval API Response:', data);
+
+        if (data.success) {
+          // Show success message and reload the post
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+            '<h3 style="color: #34a853; margin-bottom: 16px;">✓ External Approval Saved!</h3>' +
+            '<p>External approval tracking has been recorded.</p>' +
+            '<p style="margin-top: 16px;"><button type="button" onclick="reloadPostAfterEdit(\'' + postId + '\');" class="submit-btn">Continue</button></p>' +
+            '</div>';
+        } else {
+          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+            '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
+            '<p>' + (data.error || 'Failed to save external approval. Please try again.') + '</p>' +
+            '<p style="margin-top: 16px;">' +
+            '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+            '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+            '</p></div>';
+        }
+
+        window.isSubmittingExternalApproval = false;
+        delete window[callbackName];
+        const script = document.getElementById('externalApprovalScript');
+        if (script) document.body.removeChild(script);
+      };
+
+      // Call API via JSONP
+      const script = document.createElement('script');
+      script.id = 'externalApprovalScript';
+      script.src = API_URL + '?action=saveExternalApproval' +
+        '&token=' + encodeURIComponent(token) +
+        '&postId=' + encodeURIComponent(postId) +
+        '&externalApprover=' + encodeURIComponent(externalApprover) +
+        '&externalApprovalDate=' + encodeURIComponent(externalApprovalDate) +
+        '&callback=' + callbackName;
+      script.onerror = function() {
+        window.isSubmittingExternalApproval = false;
+        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
+          '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
+          '<p>Failed to connect to server. Please check your connection and try again.</p>' +
+          '<p style="margin-top: 16px;">' +
+          '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
+          '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
+          '</p></div>';
+        delete window[callbackName];
+      };
+      document.body.appendChild(script);
+    }
+
+    /**
+     * Render Client Analytics
+     */
+    function renderClientAnalytics(metrics) {
+      var content = document.getElementById('analyticsContent');
+      var html = '<div style="padding: 0;">';
+
+      // Summary Cards Row
+      html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px;">';
+      html += '<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #1a73e8;"><div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Total Posts</div><div style="font-size: 32px; font-weight: 500; color: #202124;">' + metrics.totalPosts + '</div></div>';
+      html += '<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #9334e9;"><div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Published</div><div style="font-size: 32px; font-weight: 500; color: #202124;">' + metrics.publishingMetrics.published + '</div></div>';
+      html += '<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #34a853;"><div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Approval Rate</div><div style="font-size: 32px; font-weight: 500; color: #202124;">' + metrics.approvalMetrics.approvalRate + '%</div></div>';
+      html += '<div style="background: #f8f9fa; border-radius: 8px; padding: 20px; border-left: 4px solid #f9ab00;"><div style="color: #5f6368; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">On-Time Rate</div><div style="font-size: 32px; font-weight: 500; color: #202124;">' + metrics.publishingMetrics.onTimeRate + '%</div></div>';
+      html += '</div>';
+
+      // Two Column Layout
+      html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">';
+
+      // Posts by Status
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Status</h3>';
+      html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+      var statusColors = {Draft: '#9aa0a6', Internal_Review: '#f9ab00', Client_Review: '#ea4335', Approved: '#34a853', Scheduled: '#1a73e8', Published: '#9334e9'};
+      for (var status in metrics.postsByStatus) {
+        var count = metrics.postsByStatus[status];
+        var percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(0) : 0;
+        var color = statusColors[status] || '#9aa0a6';
+        var displayName = status.replace(/_/g, ' ');
+        html += '<div style="display: flex; align-items: center; gap: 12px;"><div style="min-width: 140px; font-size: 14px; color: #5f6368;">' + displayName + '</div><div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;"><div style="height: 100%; background: ' + color + '; width: ' + percentage + '%; transition: width 0.3s;"></div></div><div style="min-width: 60px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">' + count + ' (' + percentage + '%)</div></div>';
+      }
+      html += '</div></div>';
+
+      // Posts by Client (will just show single client for client portal)
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Your Client Info</h3>';
+      html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+      var clientEntries = Object.entries(metrics.postsByClient).sort(function(a, b) { return b[1] - a[1]; });
+      clientEntries.forEach(function(entry) {
+        var clientName = entry[0];
+        var count = entry[1];
+        var percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(0) : 0;
+        html += '<div style="display: flex; align-items: center; gap: 12px;"><div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + clientName + '</div><div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;"><div style="height: 100%; background: #1a73e8; width: 100%; transition: width 0.3s;"></div></div><div style="min-width: 60px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">' + count + '</div></div>';
+      });
+      html += '</div></div>';
+      html += '</div>';
+
+      // Bottom Row
+      html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">';
+
+      // Approval Metrics
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Approval Metrics</h3>';
+      html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Total Approvals</div><div style="font-size: 24px; font-weight: 500; color: #202124;">' + metrics.approvalMetrics.total + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Approved</div><div style="font-size: 24px; font-weight: 500; color: #34a853;">' + metrics.approvalMetrics.approved + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Pending</div><div style="font-size: 24px; font-weight: 500; color: #f9ab00;">' + metrics.approvalMetrics.pending + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Rejected</div><div style="font-size: 24px; font-weight: 500; color: #ea4335;">' + metrics.approvalMetrics.rejected + '</div></div>';
+      html += '</div>';
+      html += '<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #f1f3f4;"><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Avg Approval Time</div><div style="font-size: 20px; font-weight: 500; color: #202124;">' + metrics.approvalMetrics.avgApprovalTimeDays + ' days</div></div>';
+      html += '</div>';
+
+      // Publishing Metrics
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Publishing Metrics</h3>';
+      html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Scheduled</div><div style="font-size: 24px; font-weight: 500; color: #1a73e8;">' + metrics.publishingMetrics.scheduled + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Published</div><div style="font-size: 24px; font-weight: 500; color: #9334e9;">' + metrics.publishingMetrics.published + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">Draft</div><div style="font-size: 24px; font-weight: 500; color: #9aa0a6;">' + metrics.publishingMetrics.draft + '</div></div>';
+      html += '<div><div style="color: #5f6368; font-size: 13px; margin-bottom: 6px;">In Review</div><div style="font-size: 24px; font-weight: 500; color: #f9ab00;">' + metrics.publishingMetrics.inReview + '</div></div>';
+      html += '</div></div>';
+      html += '</div>';
+
+      // Third Row - Subsidiary and Category
+      html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px;">';
+
+      // Posts by Subsidiary
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Subsidiary</h3>';
+      html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+      var subsidiaryEntries = Object.entries(metrics.postsBySubsidiary || {}).sort(function(a, b) { return b[1] - a[1]; });
+      if (subsidiaryEntries.length > 0) {
+        subsidiaryEntries.forEach(function(entry) {
+          var subsidiaryName = entry[0];
+          var count = entry[1];
+          var percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(1) : 0;
+          html += '<div style="display: flex; align-items: center; gap: 12px;"><div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + subsidiaryName + '</div><div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;"><div style="height: 100%; background: #7c3aed; width: ' + percentage + '%; transition: width 0.3s;"></div></div><div style="min-width: 70px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">' + count + ' (' + percentage + '%)</div></div>';
+        });
+      } else {
+        html += '<div style="text-align: center; color: #9aa0a6; padding: 20px;">No subsidiary data available</div>';
+      }
+      html += '</div></div>';
+
+      // Posts by Content Category
+      html += '<div style="background: white; border: 1px solid #dadce0; border-radius: 8px; padding: 24px;">';
+      html += '<h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 500; color: #202124;">Posts by Content Category</h3>';
+      html += '<div style="display: flex; flex-direction: column; gap: 12px;">';
+      var categoryEntries = Object.entries(metrics.postsByCategory || {}).sort(function(a, b) { return b[1] - a[1]; });
+      if (categoryEntries.length > 0) {
+        categoryEntries.forEach(function(entry) {
+          var categoryName = entry[0];
+          var count = entry[1];
+          var percentage = metrics.totalPosts > 0 ? (count / metrics.totalPosts * 100).toFixed(1) : 0;
+          html += '<div style="display: flex; align-items: center; gap: 12px;"><div style="min-width: 140px; font-size: 14px; color: #5f6368; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + categoryName + '</div><div style="flex: 1; height: 24px; background: #f1f3f4; border-radius: 4px; overflow: hidden; position: relative;"><div style="height: 100%; background: #059669; width: ' + percentage + '%; transition: width 0.3s;"></div></div><div style="min-width: 70px; text-align: right; font-size: 14px; font-weight: 500; color: #202124;">' + count + ' (' + percentage + '%)</div></div>';
+        });
+      } else {
+        html += '<div style="text-align: center; color: #9aa0a6; padding: 20px;">No category data available</div>';
+      }
+      html += '</div></div>';
+      html += '</div>';
+
+      html += '</div>';
+      content.innerHTML = html;
     }
 
     // Initialize on page load

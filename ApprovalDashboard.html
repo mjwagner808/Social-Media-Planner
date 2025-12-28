@@ -144,14 +144,27 @@
     };
 
     function loadPendingApprovals() {
+      console.log('Loading pending approvals...');
       document.getElementById('loading').style.display = 'block';
       document.getElementById('approvals-container').innerHTML = '';
-      
+
+      // Check if google.script.run is available
+      if (typeof google === 'undefined' || !google.script) {
+        console.error('google.script.run is not available');
+        document.getElementById('loading').style.display = 'none';
+        showMessage('Error: Cannot connect to backend. This page must be loaded from Apps Script.', 'error');
+        return;
+      }
+
       google.script.run
-        .withSuccessHandler(displayApprovals)
+        .withSuccessHandler(function(approvals) {
+          console.log('Received approvals:', approvals);
+          displayApprovals(approvals);
+        })
         .withFailureHandler(function(error) {
+          console.error('Error loading approvals:', error);
           document.getElementById('loading').style.display = 'none';
-          showMessage('Error loading approvals: ' + error, 'error');
+          showMessage('Error loading approvals: ' + error.message, 'error');
         })
         .getMyPendingApprovals();
     }

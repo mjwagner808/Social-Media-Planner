@@ -384,14 +384,43 @@ function getClientPosts(clientId, authorizedClient) {
   try {
     Logger.log('Getting posts for client: ' + clientId);
 
-    // Get all posts for this client
-    // IMPORTANT: Only show posts that have reached client review stage or later
-    var allowedStatuses = ['Client_Review', 'Approved', 'Scheduled', 'Published'];
+    // Get client approval records to determine which posts have EVER been submitted for client review
+    var clientApprovals = _readSheetAsObjects_('Post_Approvals', {
+      filterFn: function(a) {
+        return (a.Approval_Stage === 'Client' || a.Approval_Stage === 'Client_Review');
+      }
+    });
 
+    // Create a Set of Post IDs that have client approval records
+    var postsWithClientApprovals = {};
+    for (var i = 0; i < clientApprovals.length; i++) {
+      postsWithClientApprovals[clientApprovals[i].Post_ID] = true;
+    }
+
+    // Get all posts for this client
+    // CRITICAL LOGIC CHANGE: Show posts if they HAVE EVER been submitted for client review,
+    // OR if they are currently in a client-visible status
+    // This ensures clients don't lose access to posts that go back to Internal_Review for edits
     var posts = _readSheetAsObjects_('Posts', {
       filterFn: function(p) {
-        // Filter by Client_ID AND Status
-        return p.Client_ID === clientId && allowedStatuses.indexOf(p.Status) > -1;
+        // Only show posts for this client
+        if (p.Client_ID !== clientId) {
+          return false;
+        }
+
+        // Show if post has EVER been submitted for client review (has client approval record)
+        if (postsWithClientApprovals[p.ID]) {
+          return true;
+        }
+
+        // Also show if currently in client-visible status (for backwards compatibility)
+        var clientVisibleStatuses = {
+          'Client_Review': true,
+          'Approved': true,
+          'Scheduled': true,
+          'Published': true
+        };
+        return clientVisibleStatuses[p.Status];
       },
       coerceFn: function(p) {
         // Convert date fields to ISO strings
