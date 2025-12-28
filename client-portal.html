@@ -1407,13 +1407,15 @@
             html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #dadce0;">';
             html += '<div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: #202124;">' + fieldClean.replace(/_/g, ' ') + ':</div>';
 
-            // Old value
-            html += '<div style="margin-bottom: 6px;">';
-            html += '<div style="font-size: 11px; color: #ea4335; margin-bottom: 2px;">- Old:</div>';
-            html += '<div style="background: #fce8e6; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">';
-            html += oldValue ? escapeHtml(oldValue) : '<em style="color: #9aa0a6;">(empty)</em>';
-            html += '</div>';
-            html += '</div>';
+            // Only show Old value if it exists (not empty)
+            if (oldValue) {
+              html += '<div style="margin-bottom: 6px;">';
+              html += '<div style="font-size: 11px; color: #ea4335; margin-bottom: 2px;">- Old:</div>';
+              html += '<div style="background: #fce8e6; padding: 8px; border-radius: 4px; font-size: 12px; white-space: pre-wrap;">';
+              html += escapeHtml(oldValue);
+              html += '</div>';
+              html += '</div>';
+            }
 
             // New value
             html += '<div>';
