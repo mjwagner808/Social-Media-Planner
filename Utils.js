@@ -349,19 +349,32 @@ function sendEmail(recipient, subject, body) {
       throw new Error('Invalid email format: ' + recipient);
     }
 
-    // Get current user's email quota info
-    var quotaRemaining = MailApp.getRemainingDailyQuota();
-    Logger.log('Daily email quota remaining: ' + quotaRemaining);
+    // Send email via SendGrid
+    var apiKey = PropertiesService.getScriptProperties().getProperty('SENDGRID_API_KEY');
+    if (!apiKey) throw new Error('SENDGRID_API_KEY not set in Script Properties');
 
-    if (quotaRemaining === 0) {
-      throw new Error('Daily email quota exceeded (0 remaining)');
+    var payload = {
+      personalizations: [{to: [{email: recipient.trim()}]}],
+      from: {email: 'mj.wagner@finnpartners.com'},
+      subject: subject,
+      content: [{type: 'text/plain', value: body}]
+    };
+
+    var response = UrlFetchApp.fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {Authorization: 'Bearer ' + apiKey},
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    var code = response.getResponseCode();
+    if (code === 202) {
+      Logger.log('✅ Email sent via SendGrid to: ' + recipient);
+      return {success: true};
+    } else {
+      throw new Error('SendGrid status ' + code + ': ' + response.getContentText());
     }
-
-    // Send email using GmailApp
-    GmailApp.sendEmail(recipient.trim(), subject, body);
-    Logger.log('✅ Email sent successfully to: ' + recipient);
-
-    return {success: true};
   } catch (e) {
     Logger.log('❌ ERROR sending email: ' + e.message);
     Logger.log('Stack trace: ' + e.stack);

@@ -943,7 +943,7 @@ function handleClientApproval(token, postId, decision, notes, commentType, exter
       if (post.Created_By) {
         try {
           Logger.log('Sending email to post creator: ' + post.Created_By);
-          MailApp.sendEmail(post.Created_By, subject, body);
+          sendEmail(post.Created_By, subject, body);
           Logger.log('✅ Email sent successfully to: ' + post.Created_By);
         } catch (emailError) {
           Logger.log('❌ Failed to send email: ' + emailError.message);
@@ -1137,7 +1137,7 @@ function handleClientEdit(token, postId, postCopy, hashtags) {
                  'Please review the changes in the version history.';
 
       if (post.Created_By) {
-        MailApp.sendEmail(post.Created_By, subject, body);
+        sendEmail(post.Created_By, subject, body);
         Logger.log('✅ Email sent to post creator: ' + post.Created_By);
       } else {
         Logger.log('⚠️ No post creator email found');
