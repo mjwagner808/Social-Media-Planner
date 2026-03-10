@@ -425,11 +425,12 @@ function uploadFileToS3(filename, base64Data, contentType) {
     var stringToSign    = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' +
                           _s3BytesToHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, canonicalRequest));
 
-    var kDate    = Utilities.computeHmacSha256Signature(dateStamp, 'AWS4' + secretKey);
-    var kRegion  = Utilities.computeHmacSha256Signature(region, kDate);
-    var kService = Utilities.computeHmacSha256Signature('s3', kRegion);
-    var kSigning = Utilities.computeHmacSha256Signature('aws4_request', kService);
-    var signature = _s3BytesToHex_(Utilities.computeHmacSha256Signature(stringToSign, kSigning));
+    var hmac     = Utilities.MacAlgorithm.HMAC_SHA_256;
+    var kDate    = Utilities.computeHmacSignature(hmac, Utilities.newBlob(dateStamp).getBytes(),        Utilities.newBlob('AWS4' + secretKey).getBytes());
+    var kRegion  = Utilities.computeHmacSignature(hmac, Utilities.newBlob(region).getBytes(),           kDate);
+    var kService = Utilities.computeHmacSignature(hmac, Utilities.newBlob('s3').getBytes(),             kRegion);
+    var kSigning = Utilities.computeHmacSignature(hmac, Utilities.newBlob('aws4_request').getBytes(),   kService);
+    var signature = _s3BytesToHex_(Utilities.computeHmacSignature(hmac, Utilities.newBlob(stringToSign).getBytes(), kSigning));
 
     var authorization = 'AWS4-HMAC-SHA256 Credential=' + accessKey + '/' + credentialScope +
                         ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
