@@ -5309,6 +5309,59 @@
         });
       }
 
+      function _platformMediaHtml_(platformName) {
+        return '<div class="platform-media-title">' + platformName + ' Media</div>' +
+          '<div class="form-row">' +
+            '<div class="form-group">' +
+              '<label>Media File</label>' +
+              '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">' +
+                '<button type="button" onclick="document.getElementById(\'file-input-' + platformName + '\').click()" style="padding:6px 12px;border:1px solid #dadce0;border-radius:4px;background:white;cursor:pointer;font-size:13px;">Choose File</button>' +
+                '<span id="upload-status-' + platformName + '" style="font-size:13px;color:#5f6368;"></span>' +
+              '</div>' +
+              '<input type="file" id="file-input-' + platformName + '" accept="image/*,video/*" style="display:none" onchange="handleS3Upload(\'' + platformName + '\', this)">' +
+              '<input type="url" id="media-url-' + platformName + '" placeholder="Or paste URL directly" style="width:100%;">' +
+            '</div>' +
+            '<div class="form-group">' +
+              '<label for="media-type-' + platformName + '">Media Type</label>' +
+              '<select id="media-type-' + platformName + '">' +
+                '<option value="Image">Image</option>' +
+                '<option value="Video">Video</option>' +
+                '<option value="Carousel">Carousel</option>' +
+              '</select>' +
+            '</div>' +
+          '</div>';
+      }
+
+      function handleS3Upload(platformName, input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const statusEl = document.getElementById('upload-status-' + platformName);
+        statusEl.textContent = 'Uploading...';
+        statusEl.style.color = '#1a73e8';
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const base64 = e.target.result.split(',')[1];
+          google.script.run
+            .withSuccessHandler(function(result) {
+              if (result.success) {
+                document.getElementById('media-url-' + platformName).value = result.url;
+                statusEl.textContent = '✓ ' + file.name;
+                statusEl.style.color = '#34a853';
+              } else {
+                statusEl.textContent = 'Upload failed: ' + result.error;
+                statusEl.style.color = '#ea4335';
+              }
+            })
+            .withFailureHandler(function(err) {
+              statusEl.textContent = 'Upload failed: ' + (err.message || err);
+              statusEl.style.color = '#ea4335';
+            })
+            .uploadFileToS3(file.name, base64, file.type);
+        };
+        reader.readAsDataURL(file);
+      }
+
       function addPlatformMedia(platformName, mediaUrl, mediaType) {
         const platformMediaContainer = document.getElementById('platformMediaContainer');
 
@@ -5319,22 +5372,7 @@
           mediaArea = document.createElement('div');
           mediaArea.id = 'platform-media-' + platformName;
           mediaArea.className = 'platform-media active';
-          mediaArea.innerHTML =
-            '<div class="platform-media-title">' + platformName + ' Media</div>' +
-            '<div class="form-row">' +
-              '<div class="form-group">' +
-                '<label for="media-url-' + platformName + '">Media URL (Box.com link)</label>' +
-                '<input type="url" id="media-url-' + platformName + '" placeholder="https://box.com/...">' +
-              '</div>' +
-              '<div class="form-group">' +
-                '<label for="media-type-' + platformName + '">Media Type</label>' +
-                '<select id="media-type-' + platformName + '">' +
-                  '<option value="Image">Image</option>' +
-                  '<option value="Video">Video</option>' +
-                  '<option value="Carousel">Carousel</option>' +
-                '</select>' +
-              '</div>' +
-            '</div>';
+          mediaArea.innerHTML = _platformMediaHtml_(platformName);
           platformMediaContainer.appendChild(mediaArea);
         }
 
@@ -5364,22 +5402,7 @@
           const mediaArea = document.createElement('div');
           mediaArea.id = 'platform-media-' + platformName;
           mediaArea.className = 'platform-media active';
-          mediaArea.innerHTML =
-            '<div class="platform-media-title">' + platformName + ' Media</div>' +
-            '<div class="form-row">' +
-              '<div class="form-group">' +
-                '<label for="media-url-' + platformName + '">Media URL (Box.com link)</label>' +
-                '<input type="url" id="media-url-' + platformName + '" placeholder="https://box.com/...">' +
-              '</div>' +
-              '<div class="form-group">' +
-                '<label for="media-type-' + platformName + '">Media Type</label>' +
-                '<select id="media-type-' + platformName + '">' +
-                  '<option value="Image">Image</option>' +
-                  '<option value="Video">Video</option>' +
-                  '<option value="Carousel">Carousel</option>' +
-                '</select>' +
-              '</div>' +
-            '</div>';
+          mediaArea.innerHTML = _platformMediaHtml_(platformName);
           platformMediaContainer.appendChild(mediaArea);
         } else {
           // Remove platform from selected list

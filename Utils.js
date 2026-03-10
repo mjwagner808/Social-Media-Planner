@@ -383,6 +383,89 @@ function sendEmail(recipient, subject, body) {
 }
 
 /**
+ * Upload a file to AWS S3
+ * @param {string} filename - Original filename
+ * @param {string} base64Data - Base64-encoded file contents
+ * @param {string} contentType - MIME type (e.g. image/jpeg)
+ * @returns {{success: boolean, url: string}|{success: boolean, error: string}}
+ */
+function uploadFileToS3(filename, base64Data, contentType) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var accessKey = props.getProperty('AWS_ACCESS_KEY_ID');
+    var secretKey = props.getProperty('AWS_SECRET_ACCESS_KEY');
+    var bucket    = props.getProperty('AWS_S3_BUCKET');
+    var region    = props.getProperty('AWS_S3_REGION');
+
+    if (!accessKey || !secretKey || !bucket || !region) {
+      throw new Error('Missing AWS credentials in Script Properties');
+    }
+
+    var fileBytes = Utilities.base64Decode(base64Data);
+
+    // Use timestamp prefix to avoid filename collisions
+    var s3Key = 'uploads/' + new Date().getTime() + '_' + filename;
+    var host  = bucket + '.s3.' + region + '.amazonaws.com';
+    var url   = 'https://' + host + '/' + s3Key;
+
+    var now      = new Date();
+    var dateStamp = Utilities.formatDate(now, 'UTC', 'yyyyMMdd');
+    var amzDate  = Utilities.formatDate(now, 'UTC', "yyyyMMdd'T'HHmmss'Z'");
+
+    var payloadHash = _s3BytesToHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, fileBytes));
+
+    var canonicalHeaders = 'content-type:' + contentType + '\n' +
+                           'host:' + host + '\n' +
+                           'x-amz-content-sha256:' + payloadHash + '\n' +
+                           'x-amz-date:' + amzDate + '\n';
+    var signedHeaders    = 'content-type;host;x-amz-content-sha256;x-amz-date';
+    var canonicalRequest = 'PUT\n/' + s3Key + '\n\n' + canonicalHeaders + '\n' + signedHeaders + '\n' + payloadHash;
+
+    var credentialScope = dateStamp + '/' + region + '/s3/aws4_request';
+    var stringToSign    = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' +
+                          _s3BytesToHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, canonicalRequest));
+
+    var kDate    = Utilities.computeHmacSha256Signature(dateStamp, 'AWS4' + secretKey);
+    var kRegion  = Utilities.computeHmacSha256Signature(region, kDate);
+    var kService = Utilities.computeHmacSha256Signature('s3', kRegion);
+    var kSigning = Utilities.computeHmacSha256Signature('aws4_request', kService);
+    var signature = _s3BytesToHex_(Utilities.computeHmacSha256Signature(stringToSign, kSigning));
+
+    var authorization = 'AWS4-HMAC-SHA256 Credential=' + accessKey + '/' + credentialScope +
+                        ', SignedHeaders=' + signedHeaders + ', Signature=' + signature;
+
+    var response = UrlFetchApp.fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': authorization,
+        'Content-Type': contentType,
+        'x-amz-date': amzDate,
+        'x-amz-content-sha256': payloadHash
+      },
+      payload: fileBytes,
+      muteHttpExceptions: true
+    });
+
+    var code = response.getResponseCode();
+    if (code === 200) {
+      Logger.log('✅ S3 upload successful: ' + url);
+      return {success: true, url: url};
+    } else {
+      throw new Error('S3 returned status ' + code + ': ' + response.getContentText());
+    }
+  } catch (e) {
+    Logger.log('❌ S3 upload error: ' + e.message);
+    return {success: false, error: e.message};
+  }
+}
+
+function _s3BytesToHex_(bytes) {
+  return bytes.map(function(b) {
+    return ('0' + (b & 0xFF).toString(16)).slice(-2);
+  }).join('');
+}
+
+/**
  * Get web app URL
  * @returns {string} - Web app URL
  */
