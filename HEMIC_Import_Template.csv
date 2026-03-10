@@ -1,0 +1,2 @@
+Post_Title,Post_Copy,Scheduled_Date,Status,Client_ID,Subsidiary_IDs,Content_Category,Campaign_Name,Hashtags,Link_URL,Created_By,Created_At,Platforms,Media_File_URL
+"Sample Post Title","This is sample post copy text that will appear in the social media post.","2025-12-03","Draft","CLT-001","","Community Engagement","Holiday Campaign 2025","#HEMIC #Community","https://example.com","emmajean.karen@gmail.com","2025-12-20","LinkedIn,Facebook","https://box.com/image-url-here"

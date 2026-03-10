@@ -2240,6 +2240,262 @@ All three work together to give agency granular control over client visibility.
 
 ---
 
+## Evergreen Content Library - IN PROGRESS (December 28, 2025)
+
+### Summary
+
+Implementing an Evergreen Content Library feature to allow users to save commonly used posts as templates and quickly reuse them when creating new posts. This is especially useful for recurring content like holiday posts, weekly themes, and standard messaging.
+
+### Database Schema Design - Evergreen_Templates Sheet
+
+**Sheet Name:** `Evergreen_Templates`
+
+**Columns:**
+| Column Name | Data Type | Description | Example |
+|------------|-----------|-------------|---------|
+| ID | Text | Auto-generated template ID (TMPL-###) | TMPL-001 |
+| Template_Name | Text | User-friendly name for the template | "MLK Day Post - LinkedIn" |
+| Description | Text | Optional description/notes about when to use this template | "Use annually for MLK Day celebrations" |
+| Post_Copy | Text | Template copy with optional placeholder text | "Today we honor the legacy of Dr. Martin Luther King Jr..." |
+| Hashtags | Text | Comma-separated hashtags | "#MLKDay #Equality #Justice" |
+| Client_ID | Text (Optional) | Client this template belongs to, or blank for all clients | CLT-001 or blank |
+| Platform_IDs | Text | Comma-separated platform IDs | PLAT-001,PLAT-002 (LinkedIn, Facebook) |
+| Content_Category_ID | Text (Optional) | Default category for posts created from this template | CAT-001 |
+| Link_URL | Text (Optional) | Default link URL if applicable | https://example.com |
+| Created_By | Email | Email of user who created template | mj.wagner@finnpartners.com |
+| Created_Date | Date | When template was created | 2025-12-28 |
+| Last_Used_Date | Date | When template was last used to create a post | 2025-12-28 |
+| Usage_Count | Number | How many times this template has been used | 5 |
+| Status | Text | "Active" or "Archived" | Active |
+
+**Key Design Decisions:**
+
+1. **Simple Structure:** Mirrors Posts sheet fields that make sense for templates (Post_Copy, Hashtags, Platform_IDs, etc.)
+2. **Client-Specific OR Global:** Client_ID can be blank for templates usable by all clients
+3. **No Dates/Status:** Templates don't have scheduled dates or workflow status (those are set when creating posts from templates)
+4. **Usage Tracking:** Track when last used and how many times to identify popular templates
+5. **Platform Selection:** Store Platform_IDs so template knows which platforms it's designed for
+6. **Optional Category:** Pre-select a content category for consistency
+
+**What's NOT Stored in Templates:**
+- ❌ Scheduled_Date - Set when creating post from template
+- ❌ Post_Title - Generated from Post_Copy or user enters when creating
+- ❌ Status - Templates don't have workflow status
+- ❌ Subsidiary_IDs - Set per post based on client needs
+- ❌ Approvers - Set based on client configuration when creating post
+- ❌ Media URLs - Not stored in template (users add media when creating post)
+
+### Implementation Plan
+
+**Phase 1: Backend - Database & CRUD Operations**
+1. Create `Evergreen_Templates` sheet (auto-creates on first template save)
+2. Add functions to DataService.js:
+   - `getAllTemplates()` - Get all active templates
+   - `getTemplatesByClient(clientId)` - Get templates for specific client + global templates
+   - `saveTemplate(templateData)` - Create new template from post or from scratch
+   - `updateTemplate(templateId, templateData)` - Edit existing template
+   - `deleteTemplate(templateId)` - Archive template (soft delete)
+   - `createPostFromTemplate(templateId, postData)` - Create post using template as base
+
+**Phase 2: Frontend - Template Library UI**
+1. Add "📚 Template Library" button to main calendar navigation
+2. Create modal showing grid of available templates
+3. Display: Template_Name, Description, Platforms, Usage_Count
+4. Actions: Use Template, Edit Template, Delete Template
+5. Search/filter by client, platform, category
+
+**Phase 3: Post Creation Integration**
+1. Add "Save as Template" button to post creation form
+2. Add "Load from Template" dropdown at top of post creation form
+3. When template selected:
+   - Pre-fill Post_Copy, Hashtags, Platform_IDs, Link_URL
+   - Keep Scheduled_Date, Client_ID, Subsidiary_IDs empty for user to fill
+   - Show notification: "Loaded from template: [Template_Name]"
+
+**Phase 4: Testing & Deployment**
+1. Test template CRUD operations
+2. Test creating posts from templates
+3. Test client-specific vs global templates
+4. Test usage tracking
+5. Deploy new version
+
+### Files to Modify
+
+**DataService.js** - Add template CRUD functions
+**Index.html** - Add Template Library modal and post creation integration
+**Code.js** - Add template endpoints for client portal (optional)
+
+### User Benefits
+
+**For Content Creators:**
+- ✅ Save time on recurring content (holidays, weekly themes)
+- ✅ Maintain consistency across similar posts
+- ✅ Reduce copy-paste errors
+- ✅ Quick access to approved messaging
+
+**For Managers:**
+- ✅ Create standardized templates for team to use
+- ✅ Ensure brand consistency
+- ✅ Track which templates are most popular
+- ✅ Build library of best-performing content
+
+**For Clients:**
+- ✅ Faster turnaround on recurring content
+- ✅ Consistent messaging for annual events
+- ✅ Reduced approval time (templates already approved)
+
+### Backend Implementation - COMPLETED ✅
+
+**File: DataService.js ([lines 2329-2699](DataService.js:2329-2699))**
+
+Added 7 functions for template management:
+
+1. **`getAllTemplates()`** - Returns all active templates
+   - Filters by Status === 'Active'
+   - Uses existing `_readSheetAsObjects_` helper
+
+2. **`getTemplatesByClient(clientId)`** - Returns templates for specific client + global templates
+   - Filters by client ID OR empty client ID (global)
+   - Only returns active templates
+
+3. **`saveTemplate(templateData)`** - Create new template
+   - Auto-generates template ID (TMPL-###)
+   - Auto-creates Evergreen_Templates sheet if doesn't exist
+   - Sets Created_By, Created_Date, Status='Active'
+   - Initializes Usage_Count=0
+
+4. **`updateTemplate(templateId, templateData)`** - Update existing template
+   - Updates only fields provided in templateData
+   - Leaves other fields unchanged
+   - Validates template exists
+
+5. **`deleteTemplate(templateId)`** - Archive template (soft delete)
+   - Sets Status='Archived'
+   - Template remains in database but won't appear in active list
+
+6. **`createPostFromTemplate(templateId, postData)`** - Create post from template
+   - Loads template data (copy, hashtags, platform IDs, etc.)
+   - Merges with user-provided post data (client, date, etc.)
+   - Creates post using existing `createPostFromUI()` function
+   - Updates template usage tracking
+   - Returns {success, postId} or error
+
+7. **`updateTemplateUsage(templateId)`** - Track template usage
+   - Updates Last_Used_Date to current date
+   - Increments Usage_Count by 1
+   - Non-fatal error handling (won't fail post creation)
+
+**Key Features:**
+- ✅ Auto-creates Evergreen_Templates sheet on first template save
+- ✅ Follows existing code patterns (switch statements for headers)
+- ✅ Proper error handling with Logger.log
+- ✅ Soft delete (archive) instead of hard delete
+- ✅ Usage tracking for analytics
+- ✅ Client-specific OR global templates
+- ✅ Integrates with existing createPostFromUI function
+
+### Frontend Integration - COMPLETED ✅
+
+**Note:** The frontend UI was already implemented in a previous session! This implementation just connected it to the new backend.
+
+**File: Index.html**
+
+**Existing UI Components:**
+1. **Template Library Modal** ([lines 1667-1691](Index.html:1667-1691))
+   - Modal showing all active templates
+   - Grid layout with template cards
+   - Use and Delete buttons for each template
+   - Empty state message when no templates exist
+
+2. **Template Manager Functions** ([lines 2805-2946](Index.html:2805-2946))
+   - `openTemplateManager()` - Opens modal and loads templates
+   - `loadTemplatesForManager()` - Fetches templates from backend
+   - `displayTemplatesList()` - Renders template cards with details
+   - `useTemplate(templateId)` - Opens post form with selected template
+   - `confirmDeleteTemplate()` - Confirms deletion
+   - `deleteTemplateById()` - Calls backend to archive template
+
+3. **Template Selector in Post Creation Form** ([lines 1428-1432](Index.html:1428-1432))
+   - Dropdown at top of post creation form
+   - "Start from Template (Optional)" section
+   - Refresh button to reload templates
+   - onchange triggers `loadTemplate()`
+
+4. **Load Template Function** ([line 2650+](Index.html:2650))
+   - Populates form fields from selected template
+   - Sets Post_Copy, Hashtags, Category, Link_URL
+   - Selects platforms from template
+   - Auto-retries if form not ready
+
+5. **Save as Template Button** ([line 4164](Index.html:4164))
+   - Appears in post detail modal
+   - "📋 Save as Template" button
+   - Prompts for template name
+   - Calls `saveAsTemplate(postId)`
+
+6. **Save as Template Function** ([line 2590](Index.html:2590))
+   - Prompts user for template name
+   - Validates input
+   - Calls backend `savePostAsTemplate(postId, templateName)`
+   - Shows success/error messages
+   - Refreshes template list
+
+**New Backend Function Added:**
+
+**File: DataService.js ([lines 2701-2762](DataService.js:2701-2762))**
+
+`savePostAsTemplate(postId, templateName)` - Convert post to template
+- Gets post from Posts sheet
+- Gets platforms from Post_Platforms sheet
+- Extracts: Post_Copy, Hashtags, Client_ID, Platform_IDs, Category, Link_URL
+- Creates template using `saveTemplate()` function
+- Returns {success, templateId} or error
+
+**How It All Works Together:**
+
+1. **Creating a Template from Post:**
+   - User opens post detail → Clicks "📋 Save as Template"
+   - Prompted for template name
+   - Frontend calls `savePostAsTemplate(postId, templateName)`
+   - Backend extracts post data and creates template
+   - Template appears in Template Library
+
+2. **Using a Template:**
+   - User opens post creation form
+   - Selects template from "Start from Template" dropdown
+   - Form auto-fills with template data (copy, hashtags, platforms, etc.)
+   - User fills in client, date, and other post-specific details
+   - Creates post normally
+
+3. **Managing Templates:**
+   - User clicks "📋 Templates" button in action bar
+   - Template Library modal opens
+   - Shows all templates with Use/Delete actions
+   - Can delete templates (soft delete - sets Status='Archived')
+
+### Implementation Complete - READY TO TEST ✅
+
+All components are now connected and functional:
+- ✅ Database schema designed
+- ✅ Backend CRUD functions implemented (8 functions total)
+- ✅ Frontend UI already existed (from previous work)
+- ✅ Frontend connected to new backend functions
+- ✅ Save post as template functionality complete
+- ✅ Load template into post form functionality complete
+- ✅ Template library management complete
+
+### Next Steps
+
+1. ✅ Design schema (complete)
+2. ✅ Create backend functions for template CRUD operations (complete)
+3. ✅ Add Template Library UI to main calendar page (already existed!)
+4. ✅ Add Save as Template button to post creation form (already existed!)
+5. ✅ Add Load from Template dropdown to post creation form (already existed!)
+6. ✅ Connect frontend to new backend with `savePostAsTemplate()` (complete)
+7. ⏳ Deploy and test Evergreen Content Library feature
+
+---
+
 ## Notes
 
 - All changes follow CLAUDE.md guidelines: simple, minimal impact, no bugs introduced

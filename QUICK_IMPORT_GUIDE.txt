@@ -1,0 +1,115 @@
+╔════════════════════════════════════════════════════════════════╗
+║     HEMIC SMARTSHEET IMPORT - QUICK REFERENCE CARD             ║
+╚════════════════════════════════════════════════════════════════╝
+
+┌─ STEP 1: EXPORT FROM SMARTSHEET ───────────────────────────────┐
+│                                                                 │
+│  1. Open Smartsheet                                            │
+│  2. File → Export → CSV                                        │
+│  3. Save to Desktop                                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 2: UPLOAD TO GOOGLE DRIVE ───────────────────────────────┐
+│                                                                 │
+│  1. Go to drive.google.com                                     │
+│  2. New → File upload → Select your CSV                        │
+│  3. Right-click file → Get link                                │
+│  4. Copy just the ID from the URL:                             │
+│                                                                 │
+│     https://drive.google.com/file/d/1ABC123xyz/view            │
+│                                          ^^^^^^^^^              │
+│                                        Copy this!              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 3: UPDATE SCRIPT ─────────────────────────────────────────┐
+│                                                                 │
+│  1. Open: https://script.google.com → Social Media Planner     │
+│  2. Click SmartsheetImporter.js                                │
+│  3. Find line 20:                                              │
+│                                                                 │
+│     var CSV_FILE_ID = 'YOUR_CSV_FILE_ID_HERE';                 │
+│                                                                 │
+│  4. Replace with your actual ID:                               │
+│                                                                 │
+│     var CSV_FILE_ID = '1ABC123xyz';                            │
+│                                                                 │
+│  5. Save (Cmd+S / Ctrl+S)                                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 4: RUN IMPORT ────────────────────────────────────────────┐
+│                                                                 │
+│  1. Function dropdown → importSmartsheetData                   │
+│  2. Click ▶️ Run button                                         │
+│  3. Grant permissions (first time only)                        │
+│  4. Wait for "Execution completed"                             │
+│  5. View → Logs to see results                                 │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─ STEP 5: VERIFY ────────────────────────────────────────────────┐
+│                                                                 │
+│  1. Open database spreadsheet                                  │
+│  2. Posts tab → Check new rows at bottom                       │
+│  3. Post_Platforms tab → Check platform entries                │
+│  4. Open Social Media Planner app                              │
+│  5. Check calendar for imported posts                          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+╔════════════════════════════════════════════════════════════════╗
+║  WHAT GETS IMPORTED                                            ║
+╚════════════════════════════════════════════════════════════════╝
+
+✅ Post Copy         → Post_Copy
+✅ Visual URLs       → Media_File_URL
+✅ LinkedIn #        → Hashtags
+✅ Scheduled Date    → Scheduled_Date
+✅ Status            → Draft (all posts)
+✅ Client            → CLT-001 (HEMIC)
+✅ Platforms         → LinkedIn, Facebook (both)
+✅ Created By        → emmajean.karen@gmail.com
+
+⬜ Subsidiaries      → Blank (assign later in app)
+⬜ Categories        → Blank (optional)
+⬜ Campaigns         → Blank (optional)
+
+╔════════════════════════════════════════════════════════════════╗
+║  TROUBLESHOOTING                                               ║
+╚════════════════════════════════════════════════════════════════╝
+
+ERROR: "CSV_FILE_ID not updated"
+FIX: Replace YOUR_CSV_FILE_ID_HERE with actual ID
+
+ERROR: "File not found"
+FIX: Check file ID is correct, file is uploaded to Drive
+
+ERROR: "Column not found"
+FIX: Check Smartsheet column names match script expectations
+
+NO POSTS IN APP:
+FIX: Refresh calendar, check Status=Draft, check Client_ID=CLT-001
+
+╔════════════════════════════════════════════════════════════════╗
+║  AFTER IMPORT                                                  ║
+╚════════════════════════════════════════════════════════════════╝
+
+1. Open each post and assign subsidiaries:
+   • HEMIC FOC (SUB-001)
+   • EPIC (SUB-002)
+   • HIMI (SUB-003)
+   • HEMIC Foundation (SUB-004)
+
+2. Add categories/campaigns if needed
+
+3. Change status Draft → Internal_Review when ready
+
+4. Delete old test posts (POST-001, etc.) if desired
+
+╔════════════════════════════════════════════════════════════════╗
+║  NEED MORE HELP?                                               ║
+╚════════════════════════════════════════════════════════════════╝
+
+See IMPORT_INSTRUCTIONS.md for detailed step-by-step guide

@@ -2817,35 +2817,45 @@
       }
 
       function loadTemplatesForManager() {
+        console.log('loadTemplatesForManager called');
         const templatesList = document.getElementById('templatesList');
         templatesList.innerHTML = '<div style="text-align: center; padding: 40px; color: #9aa0a6;"><p>Loading templates...</p></div>';
 
         google.script.run
           .withSuccessHandler(function(templates) {
+            console.log('Templates loaded successfully:', templates);
+            console.log('Is array?', Array.isArray(templates));
+            console.log('Length:', templates ? templates.length : 'null/undefined');
             allTemplates = Array.isArray(templates) ? templates : [];
             displayTemplatesList(templates);
           })
           .withFailureHandler(function(error) {
+            console.error('Error loading templates:', error);
             templatesList.innerHTML = '<div style="text-align: center; padding: 40px; color: #ea4335;"><p>Error loading templates: ' + error.message + '</p></div>';
           })
           .getAllTemplates();
       }
 
       function displayTemplatesList(templates) {
+        console.log('displayTemplatesList called with:', templates);
         const templatesList = document.getElementById('templatesList');
 
-        if (!templates || templates.length === 0) {
-          templatesList.innerHTML =
-            '<div style="text-align: center; padding: 40px; color: #9aa0a6;">' +
-            '<p style="font-size: 16px; margin-bottom: 12px;">No templates yet</p>' +
-            '<p style="font-size: 14px;">Create a post and use "📋 Save as Template" to get started!</p>' +
-            '</div>';
-          return;
-        }
+        try {
+          if (!templates || templates.length === 0) {
+            console.log('No templates to display');
+            templatesList.innerHTML =
+              '<div style="text-align: center; padding: 40px; color: #9aa0a6;">' +
+              '<p style="font-size: 16px; margin-bottom: 12px;">No templates yet</p>' +
+              '<p style="font-size: 14px;">Create a post and use "📋 Save as Template" to get started!</p>' +
+              '</div>';
+            return;
+          }
 
-        let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
+          console.log('Rendering ' + templates.length + ' template(s)');
+          let html = '<div style="display: flex; flex-direction: column; gap: 16px;">';
 
-        templates.forEach(function(template) {
+          templates.forEach(function(template) {
+            console.log('Rendering template:', template);
           html += '<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 16px; background: #fff;">';
 
           // Template header
@@ -2853,7 +2863,8 @@
           html += '<div style="flex: 1;">';
           html += '<h3 style="margin: 0 0 4px 0; font-size: 16px; color: #202124;">' + escapeHtml(template.Template_Name) + '</h3>';
           html += '<div style="font-size: 13px; color: #5f6368;">';
-          html += 'Created: ' + formatDateForDisplay(template.Created_Date) + ' by ' + escapeHtml(template.Created_By);
+          var createdDate = template.Created_Date ? new Date(template.Created_Date).toLocaleDateString() : 'Unknown';
+          html += 'Created: ' + createdDate + ' by ' + escapeHtml(template.Created_By);
           html += '</div>';
           html += '</div>';
 
@@ -2867,20 +2878,28 @@
           // Template details
           html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 14px;">';
 
-          if (template.Post_Title) {
-            html += '<div><strong style="color: #5f6368;">Title:</strong> ' + escapeHtml(template.Post_Title) + '</div>';
+          if (template.Description) {
+            html += '<div><strong style="color: #5f6368;">Description:</strong> ' + escapeHtml(template.Description) + '</div>';
           }
 
-          if (template.Platforms) {
-            html += '<div><strong style="color: #5f6368;">Platforms:</strong> ' + escapeHtml(template.Platforms) + '</div>';
+          if (template.Platform_IDs) {
+            html += '<div><strong style="color: #5f6368;">Platforms:</strong> ' + escapeHtml(template.Platform_IDs) + '</div>';
           }
 
-          if (template.Content_Category) {
-            html += '<div><strong style="color: #5f6368;">Category:</strong> ' + escapeHtml(template.Content_Category) + '</div>';
+          if (template.Content_Category_ID) {
+            html += '<div><strong style="color: #5f6368;">Category:</strong> ' + escapeHtml(template.Content_Category_ID) + '</div>';
           }
 
           if (template.Hashtags) {
             html += '<div><strong style="color: #5f6368;">Hashtags:</strong> ' + escapeHtml(template.Hashtags) + '</div>';
+          }
+
+          if (template.Usage_Count !== undefined && template.Usage_Count !== null) {
+            html += '<div><strong style="color: #5f6368;">Times Used:</strong> ' + template.Usage_Count + '</div>';
+          }
+
+          if (template.Client_ID) {
+            html += '<div><strong style="color: #5f6368;">Client:</strong> ' + escapeHtml(template.Client_ID) + '</div>';
           }
 
           html += '</div>';
@@ -2901,7 +2920,12 @@
 
         html += '</div>';
         templatesList.innerHTML = html;
+        console.log('Templates rendered successfully');
+      } catch (error) {
+        console.error('Error in displayTemplatesList:', error);
+        templatesList.innerHTML = '<div style="text-align: center; padding: 40px; color: #ea4335;"><p>Error displaying templates: ' + error.message + '</p><p style="font-size: 12px; margin-top: 8px;">Check browser console for details</p></div>';
       }
+    }
 
       function useTemplate(templateId) {
         // Close template manager

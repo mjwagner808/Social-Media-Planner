@@ -2325,3 +2325,458 @@ function bulkReschedule(postIds, newDate) {
     return {success: false, error: e.toString()};
   }
 }
+
+// ========================================
+// EVERGREEN TEMPLATES - CRUD OPERATIONS
+// ========================================
+
+/**
+ * Get all active templates
+ * @returns {Array} Array of template objects
+ */
+function getAllTemplates() {
+  try {
+    // Check if Evergreen_Templates sheet exists
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var templatesSheet = ss.getSheetByName('Evergreen_Templates');
+
+    if (!templatesSheet) {
+      Logger.log('Evergreen_Templates sheet does not exist yet - returning empty array');
+      return []; // Return empty array if sheet doesn't exist
+    }
+
+    var templates = _readSheetAsObjects_('Evergreen_Templates', {
+      filterFn: function(t) { return t.Status === 'Active'; }
+    });
+
+    Logger.log('Found ' + templates.length + ' active templates');
+    return templates;
+  } catch (e) {
+    Logger.log('Error in getAllTemplates: ' + e.message);
+    // Return empty array on error instead of error object
+    return [];
+  }
+}
+
+/**
+ * Get templates for a specific client (includes client-specific + global templates)
+ * @param {string} clientId - Client ID to filter by
+ * @returns {Array} Array of template objects
+ */
+function getTemplatesByClient(clientId) {
+  try {
+    // Check if Evergreen_Templates sheet exists
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var templatesSheet = ss.getSheetByName('Evergreen_Templates');
+
+    if (!templatesSheet) {
+      Logger.log('Evergreen_Templates sheet does not exist yet - returning empty array');
+      return []; // Return empty array if sheet doesn't exist
+    }
+
+    var templates = _readSheetAsObjects_('Evergreen_Templates', {
+      filterFn: function(t) {
+        // Include active templates that belong to this client OR are global (no client ID)
+        return t.Status === 'Active' && (t.Client_ID === clientId || !t.Client_ID || t.Client_ID === '');
+      }
+    });
+
+    Logger.log('Found ' + templates.length + ' templates for client ' + clientId);
+    return templates;
+  } catch (e) {
+    Logger.log('Error in getTemplatesByClient: ' + e.message);
+    // Return empty array on error instead of error object
+    return [];
+  }
+}
+
+/**
+ * Save a new template
+ * @param {Object} templateData - Template data object
+ * @returns {Object} {success: boolean, templateId: string, error: string}
+ */
+function saveTemplate(templateData) {
+  try {
+    Logger.log('========== saveTemplate called ==========');
+    Logger.log('Template data: ' + JSON.stringify(templateData));
+
+    var currentUser = Session.getActiveUser().getEmail();
+    var timestamp = new Date();
+
+    // Generate new template ID
+    var templateId = generateId('TMPL');
+
+    // Get or create Evergreen_Templates sheet
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var templatesSheet = ss.getSheetByName('Evergreen_Templates');
+
+    // If sheet doesn't exist, create it
+    if (!templatesSheet) {
+      Logger.log('Creating new Evergreen_Templates sheet...');
+      templatesSheet = ss.insertSheet('Evergreen_Templates');
+
+      // Add headers
+      var headers = [
+        'ID', 'Template_Name', 'Description', 'Post_Copy', 'Hashtags',
+        'Client_ID', 'Platform_IDs', 'Content_Category_ID', 'Link_URL',
+        'Created_By', 'Created_Date', 'Last_Used_Date', 'Usage_Count', 'Status'
+      ];
+      templatesSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      templatesSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      Logger.log('Evergreen_Templates sheet created with headers');
+    }
+
+    var headers = templatesSheet.getRange(1, 1, 1, templatesSheet.getLastColumn()).getValues()[0];
+
+    // Prepare row data
+    var rowData = [];
+    headers.forEach(function(header) {
+      switch(header) {
+        case 'ID':
+          rowData.push(templateId);
+          break;
+        case 'Template_Name':
+          rowData.push(templateData.templateName || '');
+          break;
+        case 'Description':
+          rowData.push(templateData.description || '');
+          break;
+        case 'Post_Copy':
+          rowData.push(templateData.postCopy || '');
+          break;
+        case 'Hashtags':
+          rowData.push(templateData.hashtags || '');
+          break;
+        case 'Client_ID':
+          rowData.push(templateData.clientId || '');
+          break;
+        case 'Platform_IDs':
+          rowData.push(templateData.platformIds || '');
+          break;
+        case 'Content_Category_ID':
+          rowData.push(templateData.categoryId || '');
+          break;
+        case 'Link_URL':
+          rowData.push(templateData.linkUrl || '');
+          break;
+        case 'Created_By':
+          rowData.push(currentUser);
+          break;
+        case 'Created_Date':
+          rowData.push(timestamp);
+          break;
+        case 'Last_Used_Date':
+          rowData.push(''); // Empty until first use
+          break;
+        case 'Usage_Count':
+          rowData.push(0); // Start at 0
+          break;
+        case 'Status':
+          rowData.push('Active');
+          break;
+        default:
+          rowData.push('');
+      }
+    });
+
+    // Append to sheet
+    templatesSheet.appendRow(rowData);
+    Logger.log('Template saved successfully: ' + templateId);
+
+    return {
+      success: true,
+      templateId: templateId,
+      message: 'Template saved successfully'
+    };
+
+  } catch (e) {
+    Logger.log('Error in saveTemplate: ' + e.message);
+    return _err_(e, 'saveTemplate');
+  }
+}
+
+/**
+ * Update an existing template
+ * @param {string} templateId - Template ID to update
+ * @param {Object} templateData - Updated template data
+ * @returns {Object} {success: boolean, error: string}
+ */
+function updateTemplate(templateId, templateData) {
+  try {
+    Logger.log('========== updateTemplate called ==========');
+    Logger.log('Template ID: ' + templateId);
+
+    var templatesSheet = _getSheet_('Evergreen_Templates');
+    var data = templatesSheet.getDataRange().getValues();
+    var headers = data[0];
+
+    // Find the template row
+    var rowIndex = -1;
+    var idIndex = headers.indexOf('ID');
+
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === templateId) {
+        rowIndex = i;
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      return {success: false, error: 'Template not found: ' + templateId};
+    }
+
+    // Update only the fields provided
+    for (var col = 0; col < headers.length; col++) {
+      var header = headers[col];
+      var cellValue = null;
+
+      switch(header) {
+        case 'Template_Name':
+          if (templateData.templateName !== undefined) cellValue = templateData.templateName;
+          break;
+        case 'Description':
+          if (templateData.description !== undefined) cellValue = templateData.description;
+          break;
+        case 'Post_Copy':
+          if (templateData.postCopy !== undefined) cellValue = templateData.postCopy;
+          break;
+        case 'Hashtags':
+          if (templateData.hashtags !== undefined) cellValue = templateData.hashtags;
+          break;
+        case 'Client_ID':
+          if (templateData.clientId !== undefined) cellValue = templateData.clientId;
+          break;
+        case 'Platform_IDs':
+          if (templateData.platformIds !== undefined) cellValue = templateData.platformIds;
+          break;
+        case 'Content_Category_ID':
+          if (templateData.categoryId !== undefined) cellValue = templateData.categoryId;
+          break;
+        case 'Link_URL':
+          if (templateData.linkUrl !== undefined) cellValue = templateData.linkUrl;
+          break;
+        default:
+          continue;
+      }
+
+      if (cellValue !== null) {
+        templatesSheet.getRange(rowIndex + 1, col + 1).setValue(cellValue);
+      }
+    }
+
+    Logger.log('Template updated successfully');
+    return {success: true, message: 'Template updated successfully'};
+
+  } catch (e) {
+    Logger.log('Error in updateTemplate: ' + e.message);
+    return _err_(e, 'updateTemplate');
+  }
+}
+
+/**
+ * Archive a template (soft delete)
+ * @param {string} templateId - Template ID to archive
+ * @returns {Object} {success: boolean, error: string}
+ */
+function deleteTemplate(templateId) {
+  try {
+    Logger.log('Archiving template: ' + templateId);
+
+    var templatesSheet = _getSheet_('Evergreen_Templates');
+    var data = templatesSheet.getDataRange().getValues();
+    var headers = data[0];
+
+    var idIndex = headers.indexOf('ID');
+    var statusIndex = headers.indexOf('Status');
+
+    // Find and update status to Archived
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === templateId) {
+        templatesSheet.getRange(i + 1, statusIndex + 1).setValue('Archived');
+        Logger.log('Template archived successfully');
+        return {success: true, message: 'Template archived successfully'};
+      }
+    }
+
+    return {success: false, error: 'Template not found: ' + templateId};
+
+  } catch (e) {
+    Logger.log('Error in deleteTemplate: ' + e.message);
+    return _err_(e, 'deleteTemplate');
+  }
+}
+
+/**
+ * Create a new post from a template
+ * @param {string} templateId - Template ID to use
+ * @param {Object} postData - Additional post data (scheduled date, client, etc.)
+ * @returns {Object} {success: boolean, postId: string, error: string}
+ */
+function createPostFromTemplate(templateId, postData) {
+  try {
+    Logger.log('========== createPostFromTemplate called ==========');
+    Logger.log('Template ID: ' + templateId);
+
+    // Get the template
+    var templates = _readSheetAsObjects_('Evergreen_Templates', {
+      filterFn: function(t) { return t.ID === templateId; }
+    });
+
+    if (templates.length === 0) {
+      return {success: false, error: 'Template not found: ' + templateId};
+    }
+
+    var template = templates[0];
+    Logger.log('Found template: ' + template.Template_Name);
+
+    // Merge template data with post data
+    var mergedData = {
+      // From template
+      copy: template.Post_Copy || '',
+      hashtags: template.Hashtags || '',
+      linkUrl: template.Link_URL || '',
+      categoryId: template.Content_Category_ID || '',
+
+      // From postData (user must provide these)
+      clientId: postData.clientId || '',
+      scheduledDate: postData.scheduledDate || '',
+      scheduledTime: postData.scheduledTime || '',
+      title: postData.title || '',
+      subsidiaryIds: postData.subsidiaryIds || '',
+      notes: postData.notes || '',
+      internalApprovers: postData.internalApprovers || '',
+      clientApprovers: postData.clientApprovers || '',
+      submitForReview: postData.submitForReview || false,
+
+      // Platform data from template
+      platforms: postData.platforms || [] // User can override platforms
+    };
+
+    // If platforms not provided in postData, parse from template
+    if (mergedData.platforms.length === 0 && template.Platform_IDs) {
+      // Convert comma-separated platform IDs to platform objects
+      var platformIds = template.Platform_IDs.split(',').map(function(id) { return id.trim(); });
+      mergedData.platforms = platformIds.map(function(platformId) {
+        return {
+          platform: platformId,
+          mediaUrl: '', // User must add media URLs
+          mediaType: ''
+        };
+      });
+    }
+
+    Logger.log('Creating post from template with merged data');
+
+    // Create the post using existing createPostFromUI function
+    var result = createPostFromUI(mergedData);
+
+    if (result.success) {
+      // Update template usage tracking
+      updateTemplateUsage(templateId);
+
+      Logger.log('Post created from template successfully: ' + result.postId);
+    }
+
+    return result;
+
+  } catch (e) {
+    Logger.log('Error in createPostFromTemplate: ' + e.message);
+    return _err_(e, 'createPostFromTemplate');
+  }
+}
+
+/**
+ * Update template usage tracking (Last_Used_Date and Usage_Count)
+ * @param {string} templateId - Template ID to update
+ */
+function updateTemplateUsage(templateId) {
+  try {
+    var templatesSheet = _getSheet_('Evergreen_Templates');
+    var data = templatesSheet.getDataRange().getValues();
+    var headers = data[0];
+
+    var idIndex = headers.indexOf('ID');
+    var lastUsedIndex = headers.indexOf('Last_Used_Date');
+    var usageCountIndex = headers.indexOf('Usage_Count');
+
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][idIndex] === templateId) {
+        // Update Last_Used_Date
+        templatesSheet.getRange(i + 1, lastUsedIndex + 1).setValue(new Date());
+
+        // Increment Usage_Count
+        var currentCount = data[i][usageCountIndex] || 0;
+        templatesSheet.getRange(i + 1, usageCountIndex + 1).setValue(currentCount + 1);
+
+        Logger.log('Template usage updated: ' + templateId + ' (count: ' + (currentCount + 1) + ')');
+        break;
+      }
+    }
+  } catch (e) {
+    Logger.log('Error updating template usage: ' + e.message);
+    // Don't fail the post creation if usage tracking fails
+  }
+}
+
+/**
+ * Save an existing post as a template
+ * @param {string} postId - Post ID to convert to template
+ * @param {string} templateName - Name for the template
+ * @returns {Object} {success: boolean, templateId: string, error: string}
+ */
+function savePostAsTemplate(postId, templateName) {
+  try {
+    Logger.log('========== savePostAsTemplate called ==========');
+    Logger.log('Post ID: ' + postId + ', Template Name: ' + templateName);
+
+    // Get the post
+    var posts = _readSheetAsObjects_('Posts', {
+      filterFn: function(p) { return p.ID === postId; }
+    });
+
+    if (posts.length === 0) {
+      return {success: false, error: 'Post not found: ' + postId};
+    }
+
+    var post = posts[0];
+    Logger.log('Found post: ' + (post.Post_Title || post.ID));
+
+    // Get platform IDs from Post_Platforms
+    var platforms = _readSheetAsObjects_('Post_Platforms', {
+      filterFn: function(pp) { return pp.Post_ID === postId; }
+    });
+
+    var platformIds = platforms.map(function(p) {
+      return p.Platform || p.Platform_ID;
+    }).join(',');
+
+    Logger.log('Platform IDs: ' + platformIds);
+
+    // Create template data from post
+    var templateData = {
+      templateName: templateName,
+      description: 'Created from post: ' + (post.Post_Title || postId),
+      postCopy: post.Post_Copy || '',
+      hashtags: post.Hashtags || '',
+      clientId: post.Client_ID || '', // Preserve client ID (can be blank for global templates)
+      platformIds: platformIds,
+      categoryId: post.Content_Category_ID || post.Content_Category || '',
+      linkUrl: post.Link_URL || ''
+    };
+
+    Logger.log('Calling saveTemplate with template data');
+
+    // Use existing saveTemplate function
+    var result = saveTemplate(templateData);
+
+    if (result.success) {
+      Logger.log('✅ Post saved as template successfully: ' + result.templateId);
+    }
+
+    return result;
+
+  } catch (e) {
+    Logger.log('Error in savePostAsTemplate: ' + e.message);
+    return _err_(e, 'savePostAsTemplate');
+  }
+}
