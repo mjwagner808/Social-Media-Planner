@@ -14,6 +14,7 @@
  * Creates approval records for internal approvers
  */
 function submitForInternalReview(postId) {
+  invalidatePostsCache();
   var post = _getPostByIdSimple(postId);
   if (!post) {
     return {success: false, error: 'Post not found'};
@@ -94,6 +95,7 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
  * @param {boolean} skipInternal - Optional flag to skip internal approval validation
  */
 function submitForClientReview(postId, skipInternal) {
+  invalidatePostsCache();
   var post = _getPostByIdSimple(postId);
   if (!post) {
     return {success: false, error: 'Post not found'};
@@ -230,6 +232,7 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
  * Record approval decision
  */
 function recordApprovalDecision(approvalId, decision, notes, approverEmail) {
+  invalidatePostsCache();
   Logger.log('=== RECORD APPROVAL DECISION ===');
   Logger.log('Approval ID: ' + approvalId);
   Logger.log('Decision: ' + decision);

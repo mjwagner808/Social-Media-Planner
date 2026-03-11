@@ -242,6 +242,7 @@ function getClientApprovers(clientId) {
  * Updates: Posts, Post_Platforms, Post_Approvals
  */
 function updatePostStatus(postId, newStatus) {
+  invalidatePostsCache();
   Logger.log('=== UPDATING POST STATUS ===');
   Logger.log('Post ID: ' + postId);
   Logger.log('New Status: ' + newStatus);
@@ -476,8 +477,23 @@ function ping() {
  * Get all posts with their first platform image
  * Extracts image URL from =IMAGE() formulas in Post_Platforms sheet
  */
+var POSTS_CACHE_KEY = 'getAllPostsWithImages_v1';
+var POSTS_CACHE_TTL = 120; // seconds
+
+function invalidatePostsCache() {
+  try { CacheService.getScriptCache().remove(POSTS_CACHE_KEY); } catch(e) {}
+}
+
 function getAllPostsWithImages() {
   try {
+    // Return cached result if available
+    var cache = CacheService.getScriptCache();
+    var cached = cache.get(POSTS_CACHE_KEY);
+    if (cached) {
+      Logger.log('getAllPostsWithImages: returning cached result');
+      return JSON.parse(cached);
+    }
+
     // Get all posts
     var posts = getAllPosts();
     Logger.log('getAllPostsWithImages: getAllPosts() returned: ' + JSON.stringify(posts));
@@ -560,6 +576,10 @@ function getAllPostsWithImages() {
     }
 
     Logger.log('getAllPostsWithImages: Returning ' + posts.length + ' posts');
+
+    // Store in cache (ignore errors if payload too large)
+    try { cache.put(POSTS_CACHE_KEY, JSON.stringify(posts), POSTS_CACHE_TTL); } catch(e) {}
+
     return posts;
 
   } catch (e) {
@@ -1272,6 +1292,7 @@ function getClientSubsidiaries(clientId) {
  */
 function createPostFromUI(postData) {
   try {
+    invalidatePostsCache();
     // Debug logging
     Logger.log('========== createPostFromUI called ==========');
     Logger.log('postData.categoryId: ' + postData.categoryId);
@@ -1418,6 +1439,7 @@ function createPostFromUI(postData) {
  */
 function updatePostFromUI(postId, postData, versionStatus) {
   try {
+    invalidatePostsCache();
     Logger.log('========== updatePostFromUI called ==========');
     Logger.log('Updating post: ' + postId);
     Logger.log('Full postData: ' + JSON.stringify(postData));
