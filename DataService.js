@@ -101,6 +101,47 @@ function getAllClients() {
   }
 }
 
+function createClient(clientData) {
+  try {
+    var sheet = _getSheet_('Clients');
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var newId = generateId('CLT');
+    var row = headers.map(function(h) {
+      if (h === 'ID')                        return newId;
+      if (h === 'Client_Name')               return clientData.name || '';
+      if (h === 'Internal_Approver_Emails')  return clientData.internalApprovers || '';
+      if (h === 'Client_Approver_Emails')    return clientData.clientApprovers || '';
+      if (h === 'Status')                    return 'Active';
+      return '';
+    });
+    sheet.appendRow(row);
+    return {success: true, id: newId};
+  } catch(e) {
+    return _err_(e, 'createClient');
+  }
+}
+
+function updateClient(clientId, updates) {
+  try {
+    var sheet = _getSheet_('Clients');
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIndex = headers.indexOf('ID');
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idIndex]) === String(clientId)) {
+        Object.keys(updates).forEach(function(key) {
+          var col = headers.indexOf(key);
+          if (col > -1) sheet.getRange(i + 1, col + 1).setValue(updates[key]);
+        });
+        return {success: true};
+      }
+    }
+    return {success: false, error: 'Client not found'};
+  } catch(e) {
+    return _err_(e, 'updateClient');
+  }
+}
+
 
 // ---------------- POSTS ----------------
 

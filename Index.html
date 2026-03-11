@@ -1708,6 +1708,9 @@
               <button class="admin-tab" onclick="switchAdminTab('clients')" id="tab-clients">
                 Client Access
               </button>
+              <button class="admin-tab" onclick="switchAdminTab('manage-clients')" id="tab-manage-clients">
+                Manage Clients
+              </button>
             </div>
           </div>
 
@@ -1722,6 +1725,17 @@
               <div style="text-align: center; padding: 40px; color: #9aa0a6;">
                 <p>Loading team members...</p>
               </div>
+            </div>
+          </div>
+
+          <!-- Manage Clients Tab -->
+          <div id="admin-tab-manage-clients" class="admin-tab-content" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+              <h3 style="margin: 0;">Clients</h3>
+              <button type="button" class="btn btn-primary" onclick="openAddClientForm()">+ Add Client</button>
+            </div>
+            <div id="manageClientsList">
+              <div style="text-align: center; padding: 40px; color: #9aa0a6;"><p>Loading clients...</p></div>
             </div>
           </div>
 
@@ -1747,6 +1761,40 @@
 
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" onclick="closeAdminPanel()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Client Modal -->
+    <div class="modal-overlay" id="clientFormModal">
+      <div class="modal-content" style="max-width: 560px;">
+        <div class="modal-header">
+          <h2 id="clientFormTitle">Add Client</h2>
+          <button type="button" class="modal-close" onclick="closeClientForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="clientForm">
+            <input type="hidden" id="clientFormId">
+            <div class="form-group">
+              <label for="clientFormName">Client Name *</label>
+              <input type="text" id="clientFormName" placeholder="e.g. HEMIC" required>
+            </div>
+            <div class="form-group">
+              <label for="clientFormInternal">Internal Approver Emails</label>
+              <input type="text" id="clientFormInternal" placeholder="email1@finn.com, email2@finn.com">
+              <small style="color:#5f6368;">Comma-separated. These agency team members approve posts internally.</small>
+            </div>
+            <div class="form-group">
+              <label for="clientFormClient">Client Approver Emails</label>
+              <input type="text" id="clientFormClient" placeholder="approver@client.com, other@client.com">
+              <small style="color:#5f6368;">Comma-separated. These client contacts approve posts for client review.</small>
+            </div>
+            <div id="clientFormError" style="display:none; color:#ea4335; background:#fce8e6; padding:10px; border-radius:4px; margin-top:12px;"></div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeClientForm()">Cancel</button>
+          <button type="button" class="btn btn-primary" id="clientFormSubmitBtn" onclick="submitClientForm()">Save Client</button>
         </div>
       </div>
     </div>
@@ -3023,27 +3071,17 @@
        * Switch between admin tabs
        */
       function switchAdminTab(tabName) {
-        // Update tab buttons
-        const teamTabBtn = document.getElementById('tab-team');
-        const clientsTabBtn = document.getElementById('tab-clients');
+        const tabs = ['team', 'clients', 'manage-clients'];
+        tabs.forEach(function(t) {
+          document.getElementById('tab-' + t).classList.remove('active');
+          document.getElementById('admin-tab-' + t).style.display = 'none';
+        });
+        document.getElementById('tab-' + tabName).classList.add('active');
+        document.getElementById('admin-tab-' + tabName).style.display = 'block';
 
-        if (tabName === 'team') {
-          teamTabBtn.classList.add('active');
-          clientsTabBtn.classList.remove('active');
-          document.getElementById('admin-tab-team').style.display = 'block';
-          document.getElementById('admin-tab-clients').style.display = 'none';
-
-          // Load team members
-          loadTeamMembers();
-        } else {
-          teamTabBtn.classList.remove('active');
-          clientsTabBtn.classList.add('active');
-          document.getElementById('admin-tab-team').style.display = 'none';
-          document.getElementById('admin-tab-clients').style.display = 'block';
-
-          // Load client access (to be implemented in Phase 2)
-          loadClientAccess();
-        }
+        if (tabName === 'team')           loadTeamMembers();
+        else if (tabName === 'clients')   loadClientAccess();
+        else                              loadManageClients();
       }
 
       /**
@@ -3618,6 +3656,142 @@
         }
 
         document.body.removeChild(textarea);
+      }
+
+      // ── MANAGE CLIENTS TAB ──────────────────────────────────────────────
+
+      function loadManageClients() {
+        const container = document.getElementById('manageClientsList');
+        container.innerHTML = '<p style="text-align:center;color:#5f6368;">Loading clients...</p>';
+        google.script.run
+          .withSuccessHandler(function(clients) { displayManageClients(clients); })
+          .withFailureHandler(function(err) {
+            container.innerHTML = '<p style="color:#ea4335;">Error loading clients: ' + err.message + '</p>';
+          })
+          .getAllClients();
+      }
+
+      function displayManageClients(clients) {
+        const container = document.getElementById('manageClientsList');
+        if (!clients || clients.length === 0) {
+          container.innerHTML = '<p style="text-align:center;color:#9aa0a6;">No clients yet. Click + Add Client to create one.</p>';
+          return;
+        }
+        let html = '';
+        clients.forEach(function(c) {
+          html += '<div style="border:1px solid #dadce0;border-radius:8px;padding:16px;margin-bottom:12px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+              '<div>' +
+                '<strong style="font-size:15px;">' + escapeHtml(c.Client_Name || '') + '</strong>' +
+                '<div style="font-size:12px;color:#5f6368;margin-top:4px;">ID: ' + escapeHtml(c.ID || '') + '</div>' +
+              '</div>' +
+              '<button type="button" class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openEditClientForm(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">Edit</button>' +
+            '</div>' +
+            '<div style="margin-top:10px;font-size:13px;color:#3c4043;">' +
+              '<div><strong>Internal Approvers:</strong> ' + escapeHtml(c.Internal_Approver_Emails || '—') + '</div>' +
+              '<div style="margin-top:4px;"><strong>Client Approvers:</strong> ' + escapeHtml(c.Client_Approver_Emails || '—') + '</div>' +
+            '</div>' +
+          '</div>';
+        });
+        container.innerHTML = html;
+      }
+
+      function openAddClientForm() {
+        document.getElementById('clientFormTitle').textContent = 'Add Client';
+        document.getElementById('clientFormId').value = '';
+        document.getElementById('clientFormName').value = '';
+        document.getElementById('clientFormInternal').value = '';
+        document.getElementById('clientFormClient').value = '';
+        document.getElementById('clientFormError').style.display = 'none';
+        document.getElementById('clientFormSubmitBtn').textContent = 'Add Client';
+        document.getElementById('clientFormModal').classList.add('active');
+      }
+
+      function openEditClientForm(client) {
+        document.getElementById('clientFormTitle').textContent = 'Edit Client';
+        document.getElementById('clientFormId').value = client.ID || '';
+        document.getElementById('clientFormName').value = client.Client_Name || '';
+        document.getElementById('clientFormInternal').value = client.Internal_Approver_Emails || '';
+        document.getElementById('clientFormClient').value = client.Client_Approver_Emails || '';
+        document.getElementById('clientFormError').style.display = 'none';
+        document.getElementById('clientFormSubmitBtn').textContent = 'Save Changes';
+        document.getElementById('clientFormModal').classList.add('active');
+      }
+
+      function closeClientForm() {
+        document.getElementById('clientFormModal').classList.remove('active');
+      }
+
+      function submitClientForm() {
+        const id   = document.getElementById('clientFormId').value;
+        const name = document.getElementById('clientFormName').value.trim();
+        const errorEl = document.getElementById('clientFormError');
+
+        if (!name) {
+          errorEl.textContent = 'Client name is required.';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        const btn = document.getElementById('clientFormSubmitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        errorEl.style.display = 'none';
+
+        const data = {
+          name:              name,
+          internalApprovers: document.getElementById('clientFormInternal').value.trim(),
+          clientApprovers:   document.getElementById('clientFormClient').value.trim()
+        };
+
+        if (id) {
+          // Edit existing
+          const updates = {
+            Client_Name:              data.name,
+            Internal_Approver_Emails: data.internalApprovers,
+            Client_Approver_Emails:   data.clientApprovers
+          };
+          google.script.run
+            .withSuccessHandler(function(result) {
+              btn.disabled = false;
+              btn.textContent = 'Save Changes';
+              if (result.success) {
+                closeClientForm();
+                loadManageClients();
+              } else {
+                errorEl.textContent = result.error || 'Failed to update client.';
+                errorEl.style.display = 'block';
+              }
+            })
+            .withFailureHandler(function(err) {
+              btn.disabled = false;
+              btn.textContent = 'Save Changes';
+              errorEl.textContent = err.message;
+              errorEl.style.display = 'block';
+            })
+            .updateClient(id, updates);
+        } else {
+          // Add new
+          google.script.run
+            .withSuccessHandler(function(result) {
+              btn.disabled = false;
+              btn.textContent = 'Add Client';
+              if (result.success) {
+                closeClientForm();
+                loadManageClients();
+              } else {
+                errorEl.textContent = result.error || 'Failed to create client.';
+                errorEl.style.display = 'block';
+              }
+            })
+            .withFailureHandler(function(err) {
+              btn.disabled = false;
+              btn.textContent = 'Add Client';
+              errorEl.textContent = err.message;
+              errorEl.style.display = 'block';
+            })
+            .createClient(data);
+        }
       }
 
       /**
