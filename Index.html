@@ -1781,12 +1781,12 @@
             </div>
             <div class="form-group">
               <label for="clientFormInternal">Internal Approver Emails</label>
-              <input type="text" id="clientFormInternal" placeholder="email1@finn.com, email2@finn.com">
+              <input type="text" id="clientFormInternal" placeholder="email1@finn.com, email2@finn.com" autocomplete="off">
               <small style="color:#5f6368;">Comma-separated. These agency team members approve posts internally.</small>
             </div>
             <div class="form-group">
               <label for="clientFormClient">Client Approver Emails</label>
-              <input type="text" id="clientFormClient" placeholder="approver@client.com, other@client.com">
+              <input type="text" id="clientFormClient" placeholder="approver@client.com, other@client.com" autocomplete="off">
               <small style="color:#5f6368;">Comma-separated. These client contacts approve posts for client review.</small>
             </div>
             <div id="clientFormError" style="display:none; color:#ea4335; background:#fce8e6; padding:10px; border-radius:4px; margin-top:12px;"></div>
@@ -3671,21 +3671,24 @@
           .getAllClients();
       }
 
+      var _clientsCache = [];
+
       function displayManageClients(clients) {
+        _clientsCache = clients || [];
         const container = document.getElementById('manageClientsList');
-        if (!clients || clients.length === 0) {
+        if (!_clientsCache.length) {
           container.innerHTML = '<p style="text-align:center;color:#9aa0a6;">No clients yet. Click + Add Client to create one.</p>';
           return;
         }
         let html = '';
-        clients.forEach(function(c) {
+        _clientsCache.forEach(function(c, idx) {
           html += '<div style="border:1px solid #dadce0;border-radius:8px;padding:16px;margin-bottom:12px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div>' +
                 '<strong style="font-size:15px;">' + escapeHtml(c.Client_Name || '') + '</strong>' +
                 '<div style="font-size:12px;color:#5f6368;margin-top:4px;">ID: ' + escapeHtml(c.ID || '') + '</div>' +
               '</div>' +
-              '<button type="button" class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openEditClientForm(' + JSON.stringify(c).replace(/"/g, '&quot;') + ')">Edit</button>' +
+              '<button type="button" class="btn btn-secondary" style="font-size:13px;padding:6px 14px;" onclick="openEditClientForm(' + idx + ')">Edit</button>' +
             '</div>' +
             '<div style="margin-top:10px;font-size:13px;color:#3c4043;">' +
               '<div><strong>Internal Approvers:</strong> ' + escapeHtml(c.Internal_Approver_Emails || '—') + '</div>' +
@@ -3707,7 +3710,9 @@
         document.getElementById('clientFormModal').classList.add('active');
       }
 
-      function openEditClientForm(client) {
+      function openEditClientForm(idx) {
+        const client = _clientsCache[idx];
+        if (!client) return;
         document.getElementById('clientFormTitle').textContent = 'Edit Client';
         document.getElementById('clientFormId').value = client.ID || '';
         document.getElementById('clientFormName').value = client.Client_Name || '';
