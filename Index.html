@@ -1748,6 +1748,7 @@
                 <select id="clientAccessFilter" onchange="filterClientAccess()" style="padding: 6px 12px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px; min-width: 200px;">
                   <option value="">All Clients</option>
                 </select>
+                <button type="button" class="btn btn-primary" onclick="openGrantAccessForm()">+ Grant Access</button>
               </div>
             </div>
 
@@ -1761,6 +1762,50 @@
 
         <div class="modal-footer">
           <button class="btn btn-secondary" type="button" onclick="closeAdminPanel()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grant Client Access Modal -->
+    <div class="modal-overlay" id="grantAccessModal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h2>Grant Portal Access</h2>
+          <button type="button" class="modal-close" onclick="closeGrantAccessForm()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <form id="grantAccessForm">
+            <div class="form-group">
+              <label for="grantAccessClient">Client *</label>
+              <select id="grantAccessClient" style="width:100%;padding:8px;border:1px solid #dadce0;border-radius:4px;font-size:14px;">
+                <option value="">Select a client...</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="grantAccessEmail">Email Address *</label>
+              <input type="email" id="grantAccessEmail" placeholder="client@example.com" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="grantAccessLevel">Access Level</label>
+              <select id="grantAccessLevel" style="width:100%;padding:8px;border:1px solid #dadce0;border-radius:4px;font-size:14px;">
+                <option value="Full">Full — Can view and approve all posts for this client</option>
+                <option value="Read_Only">Read Only — Can view posts but cannot approve</option>
+              </select>
+            </div>
+            <div id="grantAccessError" style="display:none; color:#ea4335; background:#fce8e6; padding:10px; border-radius:4px; margin-top:12px;"></div>
+            <div id="grantAccessSuccess" style="display:none; background:#e6f4ea; padding:12px; border-radius:4px; margin-top:12px;">
+              <p style="margin:0 0 8px 0; color:#137333; font-weight:500;">✅ Access granted!</p>
+              <p style="margin:0 0 6px 0; font-size:13px; color:#3c4043;">Portal URL (copy and send to client):</p>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="text" id="grantAccessUrl" readonly style="flex:1;padding:6px 8px;border:1px solid #dadce0;border-radius:4px;font-size:12px;background:#f8f9fa;">
+                <button type="button" class="btn btn-secondary" style="white-space:nowrap;font-size:13px;" onclick="copyGrantedUrl()">Copy URL</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeGrantAccessForm()">Close</button>
+          <button type="button" class="btn btn-primary" id="grantAccessSubmitBtn" onclick="submitGrantAccess()">Grant Access</button>
         </div>
       </div>
     </div>
@@ -3656,6 +3701,98 @@
         }
 
         document.body.removeChild(textarea);
+      }
+
+      // ── GRANT ACCESS MODAL ──────────────────────────────────────────────
+
+      function openGrantAccessForm() {
+        // Reset form state
+        document.getElementById('grantAccessForm').reset();
+        document.getElementById('grantAccessError').style.display = 'none';
+        document.getElementById('grantAccessSuccess').style.display = 'none';
+        document.getElementById('grantAccessSubmitBtn').style.display = '';
+
+        // Populate client dropdown
+        var select = document.getElementById('grantAccessClient');
+        select.innerHTML = '<option value="">Loading clients...</option>';
+
+        google.script.run
+          .withSuccessHandler(function(clients) {
+            select.innerHTML = '<option value="">Select a client...</option>';
+            clients.forEach(function(c) {
+              var opt = document.createElement('option');
+              opt.value = c.ID;
+              opt.textContent = c.Client_Name;
+              select.appendChild(opt);
+            });
+          })
+          .withFailureHandler(function(err) {
+            select.innerHTML = '<option value="">Error loading clients</option>';
+          })
+          .getAllClients();
+
+        document.getElementById('grantAccessModal').style.display = 'flex';
+      }
+
+      function closeGrantAccessForm() {
+        document.getElementById('grantAccessModal').style.display = 'none';
+      }
+
+      function submitGrantAccess() {
+        var clientId = document.getElementById('grantAccessClient').value;
+        var email = document.getElementById('grantAccessEmail').value.trim();
+        var accessLevel = document.getElementById('grantAccessLevel').value;
+        var errorDiv = document.getElementById('grantAccessError');
+
+        errorDiv.style.display = 'none';
+
+        if (!clientId) {
+          errorDiv.textContent = 'Please select a client.';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        if (!email) {
+          errorDiv.textContent = 'Please enter an email address.';
+          errorDiv.style.display = 'block';
+          return;
+        }
+
+        var submitBtn = document.getElementById('grantAccessSubmitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Granting...';
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Grant Access';
+            if (result.success) {
+              document.getElementById('grantAccessUrl').value = result.accessUrl || '';
+              document.getElementById('grantAccessSuccess').style.display = 'block';
+              submitBtn.style.display = 'none';
+              loadClientAccess(); // Refresh the list in the background
+            } else {
+              errorDiv.textContent = result.error || 'Failed to grant access.';
+              errorDiv.style.display = 'block';
+            }
+          })
+          .withFailureHandler(function(err) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Grant Access';
+            errorDiv.textContent = 'Error: ' + err.message;
+            errorDiv.style.display = 'block';
+          })
+          .grantClientAccess(clientId, email, accessLevel, '', 'Full');
+      }
+
+      function copyGrantedUrl() {
+        var urlInput = document.getElementById('grantAccessUrl');
+        urlInput.select();
+        try {
+          document.execCommand('copy');
+          alert('✅ Portal URL copied to clipboard!\n\nYou can now paste and send this URL to the client.');
+        } catch (err) {
+          alert('Please copy manually:\n\n' + urlInput.value);
+        }
       }
 
       // ── MANAGE CLIENTS TAB ──────────────────────────────────────────────
