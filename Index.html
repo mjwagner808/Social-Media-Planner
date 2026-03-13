@@ -3766,7 +3766,7 @@
             submitBtn.disabled = false;
             submitBtn.textContent = 'Grant Access';
             if (result.success) {
-              document.getElementById('grantAccessUrl').value = result.accessUrl || '';
+              document.getElementById('grantAccessUrl').value = result.url || '';
               document.getElementById('grantAccessSuccess').style.display = 'block';
               submitBtn.style.display = 'none';
               loadClientAccess(); // Refresh the list in the background
@@ -4191,8 +4191,8 @@
             html += '<p style="margin: 0 0 4px 0; font-size: 13px;"><strong>Approver:</strong> ' + escapeHtml(approval.Approver_Name || approval.Approver_Email) + '</p>';
 
             // Decision date/notes
-            if (approval.Approval_Decision_Date) {
-              var decisionDate = new Date(approval.Approval_Decision_Date).toLocaleString();
+            if (approval.Decision_Date) {
+              var decisionDate = new Date(approval.Decision_Date).toLocaleString();
               html += '<p style="margin: 0 0 4px 0; font-size: 12px; color: #5f6368;"><strong>Date:</strong> ' + decisionDate + '</p>';
             }
 
@@ -4254,6 +4254,7 @@
             if (commentType === 'Revision_Request') badgeColor = '#ea4335';
             else if (commentType === 'Approval_Feedback') badgeColor = '#34a853';
             else if (commentType === 'Question') badgeColor = '#f9ab00';
+            else if (commentType === 'Client_Reply') badgeColor = '#1a73e8';
 
             html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 3px solid ' + badgeColor + ';">';
             html += '<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">';
@@ -4277,7 +4278,8 @@
         html += '<div style="margin-bottom: 12px;">';
         html += '<label style="display: block; margin-bottom: 8px; font-weight: 500;">Comment Type:</label>';
         html += '<div style="display: flex; gap: 16px; flex-wrap: wrap;">';
-        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Internal_Note" checked> Internal Note</label>';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Internal_Note" checked> 🔒 Internal Note <small style="color:#9aa0a6">(private)</small></label>';
+        html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Client_Reply"> 💬 Reply to Client <small style="color:#1a73e8">(client sees this)</small></label>';
         html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Revision_Request"> Revision Request</label>';
         html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Approval_Feedback"> Approval Feedback</label>';
         html += '<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="radio" name="commentType" value="Question"> Question</label>';
@@ -4478,6 +4480,7 @@
           if (commentType === 'Revision_Request') borderColor = '#f9ab00'; // Yellow
           else if (commentType === 'Approval_Feedback') borderColor = '#188038'; // Green
           else if (commentType === 'Question') borderColor = '#ea4335'; // Red
+          else if (commentType === 'Client_Reply') borderColor = '#1a73e8'; // Blue
 
           html += `<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; border-left: 3px solid ${borderColor};">`;
           html += `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">`;
@@ -4515,7 +4518,6 @@
         } else if (post.Status === 'Internal_Review') {
           html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', false)">📤 Submit for Client Review</button>';
           html += ' <button class="btn btn-primary" type="button" onclick="submitPostForClientReview(\'' + post.ID + '\', true)">📤 Skip to Client Review</button>';
-          html += ' <button class="btn btn-success" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Approved\')">Approve</button>';
           html += ' <button class="btn btn-warning" type="button" onclick="changePostStatus(\'' + post.ID + '\', \'Draft\')">Request Changes</button>';
         } else if (post.Status === 'Client_Review') {
           // Allow submitting for client review again (in case need to add more reviewers)
@@ -5714,12 +5716,14 @@
             selectedPlatforms.push(platformName);
           }
 
-          // Create media upload area for this platform
-          const mediaArea = document.createElement('div');
-          mediaArea.id = 'platform-media-' + platformName;
-          mediaArea.className = 'platform-media active';
-          mediaArea.innerHTML = _platformMediaHtml_(platformName);
-          platformMediaContainer.appendChild(mediaArea);
+          // Create media upload area only if it doesn't already exist
+          if (!document.getElementById('platform-media-' + platformName)) {
+            const mediaArea = document.createElement('div');
+            mediaArea.id = 'platform-media-' + platformName;
+            mediaArea.className = 'platform-media active';
+            mediaArea.innerHTML = _platformMediaHtml_(platformName);
+            platformMediaContainer.appendChild(mediaArea);
+          }
         } else {
           // Remove platform from selected list
           selectedPlatforms = selectedPlatforms.filter(p => p !== platformName);
@@ -5856,15 +5860,17 @@
       }
 
       function submitPostThenSubmitForReview(formData, targetStatus) {
-        const submitBtn = document.getElementById('submitClientReviewBtn') ||
-                         document.getElementById('submitReviewBtn') ||
+        // Disable ALL form buttons to prevent double-submission
+        const allFormBtns = ['submitClientReviewBtn', 'submitReviewBtn', 'saveDraftBtn'];
+        allFormBtns.forEach(function(id) {
+          const btn = document.getElementById(id);
+          if (btn) btn.disabled = true;
+        });
+        const submitBtn = document.getElementById('submitReviewBtn') ||
+                         document.getElementById('submitClientReviewBtn') ||
                          document.getElementById('saveDraftBtn');
         const originalText = submitBtn ? submitBtn.textContent : '';
-
-        if (submitBtn) {
-          submitBtn.textContent = 'Saving...';
-          submitBtn.disabled = true;
-        }
+        if (submitBtn) submitBtn.textContent = 'Saving...';
 
         hideFormMessages();
 
@@ -5934,22 +5940,18 @@
                   }
                   showFormError('Error submitting for review: ' + error.message);
                 })
-                .submitForClientReview(reviewPostId, false);
+                .submitForClientReview(reviewPostId, true);
             }
           } else {
-            if (submitBtn) {
-              submitBtn.textContent = originalText;
-              submitBtn.disabled = false;
-            }
+            allFormBtns.forEach(function(id) { const b = document.getElementById(id); if (b) b.disabled = false; });
+            if (submitBtn) submitBtn.textContent = originalText;
             showFormError(result.error || 'Failed to save post');
           }
         };
 
         const failureHandler = function(error) {
-          if (submitBtn) {
-            submitBtn.textContent = originalText;
-            submitBtn.disabled = false;
-          }
+          allFormBtns.forEach(function(id) { const b = document.getElementById(id); if (b) b.disabled = false; });
+          if (submitBtn) submitBtn.textContent = originalText;
           showFormError(error.message || 'An unexpected error occurred. Please try again.', true);
         };
 

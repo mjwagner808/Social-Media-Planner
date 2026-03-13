@@ -38,7 +38,12 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
   // Fallback to client-level approvers
   approvers = parseIds(client.Internal_Approver_Emails);
 }
-  
+
+  // Deduplicate approvers to prevent sending multiple emails to the same person
+  approvers = approvers.filter(function(email, index, self) {
+    return self.indexOf(email) === index;
+  });
+
   if (approvers.length === 0) {
     return {success: false, error: 'No internal approvers configured for this client'};
   }
@@ -142,6 +147,11 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
   // Fallback to client-level approvers
   approvers = parseIds(client.Client_Approver_Emails);
 }
+
+  // Deduplicate approvers
+  approvers = approvers.filter(function(email, index, self) {
+    return self.indexOf(email) === index;
+  });
 
   if (approvers.length === 0) {
     return {success: false, error: 'No client approvers configured'};
@@ -251,15 +261,19 @@ function recordApprovalDecision(approvalId, decision, notes, approverEmail) {
       var dateCol = getColumnIndexByName(headers, 'Decision_Date');
       var notesCol = getColumnIndexByName(headers, 'Decision_Notes');
       var emailCol = getColumnIndexByName(headers, 'Approver_Email');
+      var nameCol = getColumnIndexByName(headers, 'Approver_Name');
 
       Logger.log('Updating approval status to: ' + decision);
       sheet.getRange(i + 1, statusCol + 1).setValue(decision);
       sheet.getRange(i + 1, dateCol + 1).setValue(new Date());
       sheet.getRange(i + 1, notesCol + 1).setValue(notes || '');
 
-      // Update approver email if provided (records actual approving client)
+      // Update approver email and name if provided (records who actually acted)
       if (approverEmail && emailCol !== -1) {
         sheet.getRange(i + 1, emailCol + 1).setValue(approverEmail);
+      }
+      if (approverEmail && nameCol !== -1) {
+        sheet.getRange(i + 1, nameCol + 1).setValue(approverEmail);
       }
 
       // CRITICAL: Flush spreadsheet changes before reading approval status

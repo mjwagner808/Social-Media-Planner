@@ -957,6 +957,7 @@ function addCommentToPost(postId, commentText, commentType) {
           rowData.push(currentUser); // Could be enhanced to look up actual name
           break;
         case 'Comment_Date':
+        case 'Created_Date':
           rowData.push(timestamp);
           break;
         case 'Comment_Type':
@@ -1454,11 +1455,6 @@ function createPostFromUI(postData) {
       if (!platformResult.success) {
         return platformResult;
       }
-    }
-
-    // If submitting for review, create approval records
-    if (postData.submitForReview && postData.internalApprovers) {
-      submitForInternalReview(postId);
     }
 
     return {

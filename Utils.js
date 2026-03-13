@@ -355,7 +355,7 @@ function sendEmail(recipient, subject, body) {
 
     var payload = {
       personalizations: [{to: [{email: recipient.trim()}]}],
-      from: {email: 'mj.wagner@finnpartners.com'},
+      from: {email: 'anthologysocial@finnpartners.com'},
       subject: subject,
       content: [{type: 'text/plain', value: body}]
     };
@@ -403,8 +403,10 @@ function uploadFileToS3(filename, base64Data, contentType) {
 
     var fileBytes = Utilities.base64Decode(base64Data);
 
+    // Sanitize filename: replace spaces and special chars to avoid S3 signature issues
+    var safeFilename = filename.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '');
     // Use timestamp prefix to avoid filename collisions
-    var s3Key = 'uploads/' + new Date().getTime() + '_' + filename;
+    var s3Key = 'uploads/' + new Date().getTime() + '_' + safeFilename;
     var host  = bucket + '.s3.' + region + '.amazonaws.com';
     var url   = 'https://' + host + '/' + s3Key;
 

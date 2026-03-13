@@ -1271,11 +1271,17 @@
           html += '<h3 style="margin-bottom: 12px;">Comment History</h3>';
 
           data.comments.forEach(function(comment) {
-            const date = new Date(comment.Created_Date);
+            const date = new Date(comment.Comment_Date || comment.Created_Date);
             const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
             const commentType = comment.Comment_Type || 'General';
 
-            html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #1a73e8;">';
+            // Color border by comment type
+            let borderColor = '#1a73e8';
+            if (commentType === 'Revision_Request') borderColor = '#f9ab00';
+            else if (commentType === 'Approval_Feedback') borderColor = '#34a853';
+            else if (commentType === 'Client_Reply') borderColor = '#9334e9';
+
+            html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid ' + borderColor + ';">';
             html += '<div style="display: flex; justify-content: space-between; margin-bottom: 6px;">';
             html += '<strong style="color: #1a73e8;">' + escapeHtml(comment.Commenter_Email) + '</strong>';
             html += '<span style="font-size: 12px; color: #5f6368;">' + dateStr + '</span>';

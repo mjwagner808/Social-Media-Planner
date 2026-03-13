@@ -999,6 +999,23 @@ function handleClientApproval(token, postId, decision, notes, commentType, exter
 
     Logger.log('✅ Client approval recorded successfully');
 
+    // Send email to post creator on approval decision
+    if (approvalStatus === 'Changes_Requested' && post.Created_By) {
+      try {
+        sendChangesRequestedEmail(postId, authorizedClient.Email, notes);
+        Logger.log('✅ Changes requested email sent to: ' + post.Created_By);
+      } catch (emailError) {
+        Logger.log('⚠️ WARNING: Failed to send changes requested email: ' + emailError.message);
+      }
+    } else if (approvalStatus === 'Approved' && post.Created_By) {
+      try {
+        sendApprovalCompletedEmail(postId);
+        Logger.log('✅ Approval completed email sent to: ' + post.Created_By);
+      } catch (emailError) {
+        Logger.log('⚠️ WARNING: Failed to send approval completed email: ' + emailError.message);
+      }
+    }
+
     return {
       success: true,
       message: decision === 'Approved' ? 'Post approved successfully' : 'Change request submitted successfully'
