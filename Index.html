@@ -1581,6 +1581,14 @@
                 </div>
 
                 <div class="form-group">
+                  <label for="postWatchers">Watchers <small style="color: #5f6368; font-weight: normal;">(notified but not required to approve)</small></label>
+                  <div id="watchersContainer">
+                    <span class="form-help">Loading team members...</span>
+                  </div>
+                  <small class="form-help">Select team members who should be notified about this post but are not required approvers.</small>
+                </div>
+
+                <div class="form-group">
                   <label for="clientApprovers">Client Approvers</label>
                   <div id="clientApproversContainer" class="checkbox-group">
                     <span class="form-help">Select a client first</span>
@@ -5186,6 +5194,14 @@
           }, 500); // Give time for approvers to load
         }
 
+        // Pre-check watchers
+        if (post.Watchers) {
+          const watcherEmails = post.Watchers.split(',').map(e => e.trim());
+          document.querySelectorAll('input[name="watcherCheckbox"]').forEach(function(cb) {
+            if (watcherEmails.indexOf(cb.value) !== -1) cb.checked = true;
+          });
+        }
+
         // Load platforms
         console.log('Post platforms:', post.platforms);
         if (post.platforms && post.platforms.length > 0) {
@@ -5760,6 +5776,22 @@
           option.textContent = user.Full_Name + ' (' + user.Email + ')';
           approversSelect.appendChild(option);
         });
+
+        // Populate watchers checkboxes
+        const watchersContainer = document.getElementById('watchersContainer');
+        if (watchersContainer && formOptions.users && formOptions.users.length > 0) {
+          let watcherHtml = '';
+          formOptions.users.forEach(function(user) {
+            const email = user.Email || user.email || '';
+            const name = user.Full_Name || user.fullName || email;
+            if (email) {
+              watcherHtml += '<label style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px; cursor: pointer;">' +
+                '<input type="checkbox" name="watcherCheckbox" value="' + email + '" style="width: auto; margin: 0;">' +
+                '<span>' + name + ' (' + email + ')</span></label>';
+            }
+          });
+          watchersContainer.innerHTML = watcherHtml || '<span class="form-help">No team members found</span>';
+        }
       }
 
       function populateSubsidiaries(subsidiaries) {
@@ -5943,7 +5975,7 @@
         charCount.textContent = copyTextarea.value.length;
       }
 
-      function validateForm() {
+      function validateForm(targetStatus) {
         const errors = [];
 
         // Required fields
@@ -5967,10 +5999,12 @@
           errors.push('At least one platform must be selected');
         }
 
-        // At least one internal approver must be selected
-        const approverSelect = document.getElementById('internalApprovers');
-        if (approverSelect.selectedOptions.length === 0) {
-          errors.push('At least one internal approver must be selected');
+        // At least one internal approver must be selected (not required for direct client review)
+        if (targetStatus !== 'Client_Review') {
+          const approverSelect = document.getElementById('internalApprovers');
+          if (approverSelect.selectedOptions.length === 0) {
+            errors.push('At least one internal approver must be selected');
+          }
         }
 
         return errors;
@@ -6013,6 +6047,10 @@
         const allClientApprovers = [...new Set([...checkedApprovers, ...customApproversList])];
         formData.clientApprovers = allClientApprovers.join(', ');
 
+        // Collect watchers
+        const watcherCheckboxes = document.querySelectorAll('input[name="watcherCheckbox"]:checked');
+        formData.watchers = Array.from(watcherCheckboxes).map(cb => cb.value).join(', ');
+
         // Collect platform data
         formData.platforms = selectedPlatforms.map(platformName => {
           return {
@@ -6031,7 +6069,7 @@
 
       function savePostWithStatus(targetStatus) {
         console.log('savePostWithStatus called with:', targetStatus, ', editingPostId:', window.editingPostId);
-        const errors = validateForm();
+        const errors = validateForm(targetStatus);
         if (errors.length > 0) {
           showFormError(errors.join('<br>'));
           return;
@@ -6155,6 +6193,12 @@
           if (submitBtn) submitBtn.textContent = originalText;
           showFormError(error.message || 'An unexpected error occurred. Please try again.', true);
         };
+
+        // For Client_Review, don't set status to Internal_Review in the save step
+        // (submitForClientReview will set the correct status)
+        if (targetStatus === 'Client_Review') {
+          formData.submitForReview = false;
+        }
 
         if (isEditing) {
           // Update post - pass targetStatus so version is created with correct Post_Status

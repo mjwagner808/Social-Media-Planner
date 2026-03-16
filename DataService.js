@@ -1488,6 +1488,9 @@ function createPostFromUI(postData) {
         case 'Client_Approvers':
           rowData.push(postData.clientApprovers || '');
           break;
+        case 'Watchers':
+          rowData.push(postData.watchers || '');
+          break;
         case 'Published_Date':
           // Only set if post is being marked as Published
           rowData.push(postData.status === 'Published' && postData.publishedDate ? new Date(postData.publishedDate) : '');
@@ -1646,6 +1649,10 @@ function updatePostFromUI(postId, postData, versionStatus) {
           break;
         case 'Client_Approvers':
           cellValue = postData.clientApprovers || '';
+          break;
+        case 'Watchers':
+          cellValue = postData.watchers !== undefined ? (postData.watchers || '') : undefined;
+          if (cellValue === undefined) continue;
           break;
         case 'Published_Date':
           // Only set if post is being marked as Published

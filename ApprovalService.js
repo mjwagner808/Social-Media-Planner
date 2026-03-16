@@ -87,6 +87,26 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
     }
   });
 
+  // Notify watchers (they receive an FYI email but do NOT get approval records)
+  if (post.Watchers && post.Watchers.trim()) {
+    var watcherEmails = parseIds(post.Watchers);
+    watcherEmails.forEach(function(watcherEmail) {
+      if (approvers.indexOf(watcherEmail) === -1) { // don't double-email approvers
+        try {
+          sendEmail(watcherEmail,
+            'FYI: Post submitted for review — ' + (client.Client_Name || ''),
+            'Hello,\n\nThis is an FYI notification. The following post has been submitted for internal review:\n\n' +
+            'Client: ' + (client.Client_Name || '') + '\n' +
+            'Title: ' + (post.Post_Title || '') + '\n' +
+            'Scheduled Date: ' + formatDate(post.Scheduled_Date) + '\n\n' +
+            'You are listed as a watcher on this post. No action is required from you.\n\n' +
+            'Log in to Social Media Planner to view the post.'
+          );
+        } catch (we) { Logger.log('Watcher email failed: ' + we.message); }
+      }
+    });
+  }
+
   logAction('Post submitted for internal review', {postId: postId});
 
   return {
@@ -140,6 +160,29 @@ function submitForClientReview(postId, skipInternal) {
 
   // Update post status to Client_Review
   updatePostStatus(postId, 'Client_Review');
+
+  // Create a version record so client can see that this post was submitted for their review.
+  // Only do this if no version was already created in the last 30 seconds (avoids duplicate
+  // when the edit form also calls updatePostFromUI which creates a version).
+  try {
+    var existingVersions = getPostVersions(postId);
+    var recentVersion = existingVersions && existingVersions.length > 0 ? existingVersions[0] : null;
+    var thirtySecondsAgo = new Date(new Date().getTime() - 30000);
+    var hasRecentVersion = recentVersion && recentVersion.Changed_Date && new Date(recentVersion.Changed_Date) > thirtySecondsAgo;
+    if (!hasRecentVersion) {
+      var postForVersion = _getPostByIdSimple(postId);
+      if (postForVersion) {
+        var versionContent = {
+          Post_Copy: postForVersion.Post_Copy || '',
+          Hashtags: postForVersion.Hashtags || '',
+          Notes: postForVersion.Notes || ''
+        };
+        createPostVersion(postId, versionContent, versionContent, 'Agency_Edit', true, 'Client_Review');
+      }
+    }
+  } catch (verErr) {
+    Logger.log('⚠️ Could not create client review version: ' + verErr.message);
+  }
 
   // Parse client approver emails
 // Get client approvers from the post (if specified), otherwise fall back to client settings
@@ -236,6 +279,26 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
       Logger.log('⚠️ WARNING: Failed to create notification: ' + notifError.message);
     }
   });
+
+  // Notify watchers (they receive an FYI email but do NOT get approval records)
+  if (post.Watchers && post.Watchers.trim()) {
+    var clientWatcherEmails = parseIds(post.Watchers);
+    clientWatcherEmails.forEach(function(watcherEmail) {
+      if (approvers.indexOf(watcherEmail) === -1) { // don't double-email approvers
+        try {
+          sendEmail(watcherEmail,
+            'FYI: Post submitted for client review — ' + (client.Client_Name || ''),
+            'Hello,\n\nThis is an FYI notification. The following post has been submitted for client review:\n\n' +
+            'Client: ' + (client.Client_Name || '') + '\n' +
+            'Title: ' + (post.Post_Title || '') + '\n' +
+            'Scheduled Date: ' + formatDate(post.Scheduled_Date) + '\n\n' +
+            'You are listed as a watcher on this post. No action is required from you.\n\n' +
+            'Log in to Social Media Planner to view the post.'
+          );
+        } catch (we) { Logger.log('Watcher email failed: ' + we.message); }
+      }
+    });
+  }
 
   logAction('Post submitted for client review', {postId: postId});
 

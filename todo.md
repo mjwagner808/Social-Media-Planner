@@ -2544,3 +2544,12 @@ All components are now connected and functional:
 ### Not Implemented (complex/needs discussion)
 - Issue #5 (Watchers vs Approvers): Separate "viewer" concept needed — discuss with team
 - Issue #7 (Client portal notifications): Complex infrastructure — deferred
+
+---
+
+## Session 2026-03-16 (Part 3) — Watchers + Submit-to-Client Fix
+
+### Changes Made
+1. **Issue 4 fix**: `validateForm` no longer requires internal approver when clicking "Submit for Client Review"; also `submitForReview` flag set to false for Client_Review path so post status isn't incorrectly set to Internal_Review during save
+2. **Issue 7 fix**: `submitForClientReview` now creates a version record if one wasn't created in the last 30 seconds, ensuring client change history is always populated regardless of which button triggered the review
+3. **Issue 5**: Added Watchers field — team members who receive FYI emails but don't block publication; saved to Posts sheet `Watchers` column; visible in edit form
