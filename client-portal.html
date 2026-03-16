@@ -1123,8 +1123,8 @@
       // Comment history section (will be loaded dynamically)
       html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
 
-      // Edit button for Client Admins (only in Client_Review status)
-      if (status === 'Client_Review' && clientInfo && clientInfo.Is_Admin) {
+      // Edit button for Client Admins and Full access users (only in Client_Review status)
+      if (status === 'Client_Review' && clientInfo && (clientInfo.Is_Admin || clientInfo.Access_Level === 'Full')) {
         html += '<div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #dadce0;">';
         html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" id="editPostBtn" style="padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">✎ Edit Post Content</button>';
         html += '<span style="margin-left: 12px; font-size: 12px; color: #5f6368;">Make direct edits to post copy and hashtags</span>';
@@ -1172,8 +1172,8 @@
         html += '</div>';
       }
 
-      // Form to record/update external approval (only for Client Admins)
-      if (clientInfo && clientInfo.Is_Admin) {
+      // Form to record/update external approval (for Client Admins and Full access users)
+      if (clientInfo && (clientInfo.Is_Admin || clientInfo.Access_Level === 'Full')) {
         // Reviewer rows header
         html += '<div style="display: grid; grid-template-columns: auto 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 4px; padding: 0 4px;">';
         html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Required</span>';
@@ -1194,7 +1194,7 @@
         html += '<button type="button" onclick="addExtReviewerRow(\'' + postId + '\')" style="padding: 6px 14px; background: white; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 10px; margin-right: 8px;">+ Add Reviewer</button>';
         html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 6px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save</button>';
       } else {
-        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Contact your client administrator to record external approvals.</p>';
       }
 
       html += '</div>';
@@ -2172,8 +2172,8 @@
       // Comment history section (will be loaded dynamically)
       html += '<div id="commentHistory" style="margin-top: 24px;"></div>';
 
-      // Edit button for Client Admins (only in Client_Review status)
-      if (status === 'Client_Review' && clientInfo && clientInfo.Is_Admin) {
+      // Edit button for Client Admins and Full access users (only in Client_Review status)
+      if (status === 'Client_Review' && clientInfo && (clientInfo.Is_Admin || clientInfo.Access_Level === 'Full')) {
         html += '<div style="margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #dadce0;">';
         html += '<button type="button" onclick="toggleEditMode(\'' + postId + '\')" id="editPostBtn" style="padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;">✎ Edit Post Content</button>';
         html += '<span style="margin-left: 12px; font-size: 12px; color: #5f6368;">Make direct edits to post copy and hashtags</span>';
@@ -2221,8 +2221,8 @@
         html += '</div>';
       }
 
-      // Form to record/update external approval (only for Client Admins)
-      if (clientInfo && clientInfo.Is_Admin) {
+      // Form to record/update external approval (for Client Admins and Full access users)
+      if (clientInfo && (clientInfo.Is_Admin || clientInfo.Access_Level === 'Full')) {
         // Reviewer rows header
         html += '<div style="display: grid; grid-template-columns: auto 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 4px; padding: 0 4px;">';
         html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Required</span>';
@@ -2243,7 +2243,7 @@
         html += '<button type="button" onclick="addExtReviewerRow(\'' + postId + '\')" style="padding: 6px 14px; background: white; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 10px; margin-right: 8px;">+ Add Reviewer</button>';
         html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 6px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save</button>';
       } else {
-        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
+        html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Contact your client administrator to record external approvals.</p>';
       }
 
       html += '</div>';

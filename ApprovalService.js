@@ -805,8 +805,8 @@ function submitApprovalDecision(approvalId, decision, comments) {
       message: 'Internal approval complete. Post sent for client review.',
       nextAction: 'sent_to_client'
     };
-  } else if (allApproved && stage === 'Client') {
-    // All client approvals complete - mark as approved
+  } else if (stage === 'Client' && allApprovals.some(function(a) { return a.Approval_Status === 'Approved'; })) {
+    // Any client approval is sufficient - mark as approved
     updatePostStatus(postId, 'Approved');
 
     // Create version record to track this status change

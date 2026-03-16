@@ -1213,13 +1213,7 @@ function getPostVersionsForClient(token, postId) {
         if (version.hasOwnProperty(key)) {
           // Exclude Notes-related fields (internal only)
           if (key !== 'Notes_Old' && key !== 'Notes_New') {
-            // CRITICAL: Hide "Old" values from clients - they should only see what changed TO, not FROM
-            // This prevents clients from seeing internal iterations before submission
-            if (key === 'Post_Copy_Old' || key === 'Hashtags_Old') {
-              clientVersion[key] = ''; // Clear old values
-            } else {
               clientVersion[key] = version[key];
-            }
           }
         }
       }
