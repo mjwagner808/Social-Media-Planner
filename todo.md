@@ -2528,3 +2528,19 @@ All components are now connected and functional:
 - Code is production-ready and tested locally
 - Ready for user acceptance testing after deployment
 - **All 5 Build Plan phases complete - core app is production-ready! 🚀**
+
+---
+
+## Session 2026-03-16 (Part 2) — Bug Fixes Round 2
+
+### Changes Made
+1. **Double emails fix**: Case-insensitive email deduplication in submitForInternalReview and submitForClientReview
+2. **Date autofill**: New post form now defaults to today's date
+3. **Cancel post**: Added Cancel Post button in post detail; sets status to Cancelled, logs reason in Notes
+4. **Your Approval Required case fix**: Email comparison is now case-insensitive
+5. **Photo/media change tracking**: updatePostFromUI now captures old platform URLs before delete; createPostVersion tracks Media_URLs changes
+6. **sendChangesRequestedEmail**: Verified notes are already included in email body — no change needed
+
+### Not Implemented (complex/needs discussion)
+- Issue #5 (Watchers vs Approvers): Separate "viewer" concept needed — discuss with team
+- Issue #7 (Client portal notifications): Complex infrastructure — deferred

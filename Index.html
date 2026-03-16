@@ -599,6 +599,8 @@
         color: #6b21a8;
       }
 
+      .status-badge.Cancelled { background: #666; color: white; }
+
       /* Legend */
       .status-filter {
         padding: 16px 24px;
@@ -4234,7 +4236,7 @@
         if (post.approvalHistory) {
           for (var api = 0; api < post.approvalHistory.length; api++) {
             var ap = post.approvalHistory[api];
-            if (ap.Approver_Email === currentUserEmail && ap.Approval_Status === 'Pending') {
+            if (ap.Approver_Email && ap.Approver_Email.toLowerCase() === currentUserEmail.toLowerCase() && ap.Approval_Status === 'Pending') {
               myPendingApproval = ap;
               break;
             }
@@ -4557,10 +4559,34 @@
           html += ' <button class="btn btn-success" type="button" onclick="markAsPublished(\'' + post.ID + '\')" style="background: #9334e9; border-color: #9334e9;">✅ Mark as Published</button>';
         }
 
+        // Cancel button (for non-terminal statuses)
+        if (post.Status !== 'Cancelled' && post.Status !== 'Published') {
+          html += ' <button class="btn btn-danger" type="button" onclick="cancelPost(\'' + post.ID + '\')" style="background: #dc3545; border-color: #dc3545;">🚫 Cancel Post</button>';
+        }
         // Close button always on the right
         html += ' <button class="btn btn-secondary" type="button" onclick="closePostDetail()">Close</button>';
 
         footer.innerHTML = html;
+      }
+
+      function cancelPost(postId) {
+        const reason = prompt('Reason for cancelling this post? (optional)');
+        if (reason === null) return; // User hit Cancel on the prompt
+        if (!confirm('Cancel this post? It will be marked Cancelled but all history will be preserved.')) return;
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result && result.success) {
+              closePostDetail();
+              invalidateCalendarCache();
+              loadCalendarData();
+            } else {
+              alert('Error: ' + (result ? result.error : 'Unknown error'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('Error: ' + error.message);
+          })
+          .cancelPost(postId, reason || '');
       }
 
       function changePostStatus(postId, newStatus) {
@@ -5591,6 +5617,18 @@
         // Set up character counter
         const copyTextarea = document.getElementById('postCopy');
         copyTextarea.addEventListener('input', updateCharCount);
+
+        // For new posts (not editing), default scheduled date to today
+        if (!window.editingPostId) {
+          const todayInput = document.getElementById('scheduledDate');
+          if (todayInput && !todayInput.value) {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            todayInput.value = yyyy + '-' + mm + '-' + dd;
+          }
+        }
       }
 
       function closePostCreationForm() {

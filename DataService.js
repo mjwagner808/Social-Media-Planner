@@ -1149,6 +1149,14 @@ function createPostVersion(postId, oldPost, newPost, changeType, shareWithClient
       hasChanges = true;
     }
 
+    // Track media/platform URL changes
+    var mediaUrlsOld = newPost.Media_URLs_Old !== undefined ? (newPost.Media_URLs_Old || '') : '';
+    var mediaUrlsNew = newPost.Media_URLs_New !== undefined ? (newPost.Media_URLs_New || '') : '';
+    if (mediaUrlsOld !== mediaUrlsNew && (mediaUrlsOld || mediaUrlsNew)) {
+      changedFields.push('Media_URLs');
+      hasChanges = true;
+    }
+
     // IMPORTANT: If no content changes but we're tracking a status change,
     // still create a version to record the workflow transition
     if (!hasChanges) {
@@ -1210,6 +1218,17 @@ function createPostVersion(postId, oldPost, newPost, changeType, shareWithClient
       Logger.log('✅ Post_Status column added');
     }
 
+    // MIGRATION: Check if Media_URLs_Old/New columns exist, add if missing
+    var hasMediaUrlsOld = headers.indexOf('Media_URLs_Old') !== -1;
+    if (!hasMediaUrlsOld) {
+      var lastCol2 = sheet.getLastColumn();
+      sheet.getRange(1, lastCol2 + 1).setValue('Media_URLs_Old');
+      sheet.getRange(1, lastCol2 + 2).setValue('Media_URLs_New');
+      sheet.getRange(1, lastCol2 + 1, 1, 2).setFontWeight('bold');
+      headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      Logger.log('✅ Media_URLs_Old/New columns added');
+    }
+
     // Get current version number for this post
     var existingVersions = _readSheetAsObjects_('Post_Versions', {
       filterFn: function(v) { return v.Post_ID === postId; }
@@ -1269,6 +1288,12 @@ function createPostVersion(postId, oldPost, newPost, changeType, shareWithClient
         case 'Post_Status':
           // Track the post's current status when this version was created
           rowData.push(postStatus || '');
+          break;
+        case 'Media_URLs_Old':
+          rowData.push(mediaUrlsOld);
+          break;
+        case 'Media_URLs_New':
+          rowData.push(mediaUrlsNew);
           break;
         default:
           rowData.push('');
@@ -1640,6 +1665,24 @@ function updatePostFromUI(postId, postData, versionStatus) {
       }
     }
 
+    // Capture old platform URLs before deleting (for change tracking)
+    var oldPlatformUrls = '';
+    try {
+      var oldPlatformSheet = _getSheet_('Post_Platforms');
+      var oldPlatformData = oldPlatformSheet.getDataRange().getValues();
+      var oldPlatHeaders = oldPlatformData[0];
+      var oldPidIdx = oldPlatHeaders.indexOf('Post_ID');
+      var oldUrlIdx = oldPlatHeaders.indexOf('Media_File_URL');
+      var oldPlatIdx = oldPlatHeaders.indexOf('Platform');
+      var oldUrls = [];
+      for (var pi = 1; pi < oldPlatformData.length; pi++) {
+        if (oldPlatformData[pi][oldPidIdx] === postId && oldPlatformData[pi][oldUrlIdx]) {
+          oldUrls.push((oldPlatformData[pi][oldPlatIdx] || '') + ':' + oldPlatformData[pi][oldUrlIdx]);
+        }
+      }
+      oldPlatformUrls = oldUrls.join('|');
+    } catch (platErr) { Logger.log('Could not read old platforms: ' + platErr.message); }
+
     // Delete existing platform entries for this post
     deletePostPlatforms(postId);
 
@@ -1654,10 +1697,23 @@ function updatePostFromUI(postId, postData, versionStatus) {
     Logger.log('Post updated successfully');
 
     // STEP 2: Create version record to track changes
+    // Build new platform URLs string for change comparison
+    var newPlatformUrls = '';
+    try {
+      if (postData.platforms && postData.platforms.length > 0) {
+        var newUrlParts = postData.platforms.map(function(p) {
+          return (p.platformId || '') + ':' + (p.mediaUrl || '');
+        });
+        newPlatformUrls = newUrlParts.join('|');
+      }
+    } catch(e2) {}
+
     var newPost = {
       Post_Copy: postData.copy || '',
       Hashtags: postData.hashtags || '',
-      Notes: postData.notes || ''
+      Notes: postData.notes || '',
+      Media_URLs_Old: oldPlatformUrls,
+      Media_URLs_New: newPlatformUrls
     };
 
     // Determine change type based on user
@@ -1919,6 +1975,42 @@ function deletePost(postId) {
   } catch (e) {
     Logger.log('❌ Error deleting post: ' + e.message);
     return _err_(e, 'deletePost');
+  }
+}
+
+/**
+ * Cancel a post by setting its status to Cancelled
+ * @param {string} postId - The post ID
+ * @param {string} reason - Optional cancellation reason
+ * @returns {Object} - Success or error
+ */
+function cancelPost(postId, reason) {
+  try {
+    invalidatePostsCache();
+    var currentUser = Session.getActiveUser().getEmail();
+    var postsSheet = _getSheet_('Posts');
+    var data = postsSheet.getDataRange().getValues();
+    var headers = data[0];
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === postId) {
+        var statusCol = headers.indexOf('Status');
+        var notesCol = headers.indexOf('Notes');
+        var modByCol = headers.indexOf('Modified_By');
+        var modDateCol = headers.indexOf('Modified_Date');
+        postsSheet.getRange(i + 1, statusCol + 1).setValue('Cancelled');
+        postsSheet.getRange(i + 1, modByCol + 1).setValue(currentUser);
+        postsSheet.getRange(i + 1, modDateCol + 1).setValue(new Date());
+        if (reason && notesCol !== -1) {
+          var existingNotes = data[i][notesCol] || '';
+          var cancelNote = '[Cancelled by ' + currentUser + ': ' + reason + ']';
+          postsSheet.getRange(i + 1, notesCol + 1).setValue(existingNotes ? existingNotes + '\n' + cancelNote : cancelNote);
+        }
+        return {success: true};
+      }
+    }
+    return {success: false, error: 'Post not found'};
+  } catch (e) {
+    return {success: false, error: e.message};
   }
 }
 

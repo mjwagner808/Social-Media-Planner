@@ -41,7 +41,7 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
 
   // Deduplicate approvers to prevent sending multiple emails to the same person
   approvers = approvers.filter(function(email, index, self) {
-    return self.indexOf(email) === index;
+    return self.findIndex(function(e) { return e.toLowerCase() === email.toLowerCase(); }) === index;
   });
 
   if (approvers.length === 0) {
@@ -153,7 +153,7 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
 
   // Deduplicate approvers
   approvers = approvers.filter(function(email, index, self) {
-    return self.indexOf(email) === index;
+    return self.findIndex(function(e) { return e.toLowerCase() === email.toLowerCase(); }) === index;
   });
 
   if (approvers.length === 0) {
