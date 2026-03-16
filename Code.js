@@ -307,7 +307,7 @@ function doGet(e) {
 
     if (!user) {
       Logger.log('No authenticated user found');
-      throw new Error('Access denied. Please use a valid access link or sign in.');
+      throw new Error('You must be logged into your Finn Partners Google account to access this page.');
     }
 
     Logger.log('Authenticated user: ' + user);
@@ -326,11 +326,11 @@ function doGet(e) {
 
     // Return error page
     return HtmlService.createHtmlOutput(
-      '<html><body style="font-family: Arial; padding: 40px; text-align: center;">' +
-      '<h1 style="color: #dc3545;">Access Error</h1>' +
-      '<p>' + error.message + '</p>' +
-      '<p style="color: #666; font-size: 14px; margin-top: 20px;">Please log in to Google with your FINN email address.</p>' +
-      '<p style="color: #999; font-size: 12px;">If this problem persists, please contact support.</p>' +
+      '<html><body style="font-family: Arial; padding: 40px; text-align: center; max-width: 500px; margin: 0 auto;">' +
+      '<h1 style="color: #dc3545; margin-bottom: 16px;">Access Denied</h1>' +
+      '<p style="font-size: 16px; margin-bottom: 12px;">You must be logged into your <strong>Finn Partners Google account</strong> to access this page.</p>' +
+      '<p style="color: #555; font-size: 14px;">If you are already signed in with a personal Google account, please switch to your @finnpartners.com account and try again.</p>' +
+      '<p style="color: #999; font-size: 12px; margin-top: 24px;">If this problem persists, please contact support.</p>' +
       '</body></html>'
     );
   }

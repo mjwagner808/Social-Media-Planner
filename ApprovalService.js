@@ -48,10 +48,13 @@ if (post.Internal_Approvers && post.Internal_Approvers.trim() !== '') {
     return {success: false, error: 'No internal approvers configured for this client'};
   }
   
-  // Create approval records for each internal approver
+  // Delete old Internal approval records for this post (stale records from prior rounds
+  // would otherwise cause checkAndUpdatePostApprovalStatus to send the post back to Draft)
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
+  deleteApprovalRecordsForStage(sheet, postId, ['Internal', 'Internal_Review']);
+
   var timestamp = new Date();
-  
+
   approvers.forEach(function(approverEmail) {
     var approverName = getUserFullName(approverEmail) || approverEmail;
     var newId = generateId('APR');
@@ -161,6 +164,11 @@ if (post.Client_Approvers && post.Client_Approvers.trim() !== '') {
 
   // Create approval records for client approvers
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
+
+  // Delete old Client approval records for this post (stale records from prior rounds
+  // would otherwise cause checkAndUpdatePostApprovalStatus to send the post back to Draft)
+  deleteApprovalRecordsForStage(sheet, postId, ['Client', 'Client_Review']);
+
   var timestamp = new Date();
 
   var approverIndex = 0;
@@ -405,6 +413,25 @@ function checkAndUpdatePostApprovalStatus(postId) {
 /**
  * Get approval records for a post
  */
+/**
+ * Delete all approval records for a post matching any of the given stage names.
+ * Used before creating new records so stale Changes_Requested records don't pollute status checks.
+ */
+function deleteApprovalRecordsForStage(sheet, postId, stages) {
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var postIdCol = headers.indexOf('Post_ID');
+  var stageCol = headers.indexOf('Approval_Stage');
+  if (postIdCol === -1 || stageCol === -1) return;
+
+  // Iterate bottom-to-top to safely delete rows
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (data[i][postIdCol] === postId && stages.indexOf(data[i][stageCol]) !== -1) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+}
+
 function getPostApprovals(postId, stage) {
   var sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Post_Approvals');
   var data = sheet.getDataRange().getValues();
