@@ -1155,33 +1155,44 @@
       html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">';
       html += '<p style="margin: 0 0 12px 0; font-size: 13px; color: #5f6368;">Use this section to record when your manager, supervisor, or other stakeholder approves this post.</p>';
 
-      // Show current external approval if exists
-      if (post.External_Approver || post.External_Approval_Date) {
+      // Show current external approvals if any
+      if (post.externalApprovals && post.externalApprovals.length > 0) {
         html += '<div style="background: #e8f5e9; padding: 12px; border-radius: 4px; border-left: 3px solid #34a853; margin-bottom: 12px;">';
-        html += '<p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Recorded</p>';
-        if (post.External_Approver) {
-          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approved by: ' + escapeHtml(post.External_Approver) + '</p>';
-        }
-        if (post.External_Approval_Date) {
-          var externalDate = new Date(post.External_Approval_Date);
-          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approval date: ' + externalDate.toLocaleDateString() + '</p>';
-        }
+        html += '<p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Tracking</p>';
+        post.externalApprovals.forEach(function(r) {
+          html += '<div style="background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #c8e6c9; margin-bottom: 6px;">';
+          html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">';
+          html += '<strong style="font-size: 13px; color: #202124;">' + escapeHtml(r.Approver_Name || 'Unnamed') + '</strong>';
+          if (r.Required === 'Yes') html += '<span style="background: #ea4335; color: white; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">⚠️ REQUIRED</span>';
+          html += '</div>';
+          if (r.Sent_Date) html += '<p style="margin: 2px 0; font-size: 12px; color: #5f6368;">Sent: ' + new Date(r.Sent_Date).toLocaleDateString() + '</p>';
+          if (r.Approval_Date) html += '<p style="margin: 2px 0; font-size: 12px; color: #137333;">✓ Approved: ' + new Date(r.Approval_Date).toLocaleDateString() + '</p>';
+          html += '</div>';
+        });
         html += '</div>';
       }
 
       // Form to record/update external approval (only for Client Admins)
       if (clientInfo && clientInfo.Is_Admin) {
-        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">';
-        html += '<div>';
-        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approver Name/Title</label>';
-        html += '<input type="text" id="externalApprover_' + postId + '" value="' + escapeHtml(post.External_Approver || '') + '" placeholder="e.g., Tammy Johnson, VP" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        // Reviewer rows header
+        html += '<div style="display: grid; grid-template-columns: auto 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 4px; padding: 0 4px;">';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Required</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Name/Title</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Sent Date</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Approval Date</span>';
+        html += '<span></span>';
         html += '</div>';
-        html += '<div>';
-        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approval Date</label>';
-        html += '<input type="date" id="externalApprovalDate_' + postId + '" value="' + (post.External_Approval_Date || '') + '" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        // Reviewer rows container
+        html += '<div id="extReviewerRows_' + postId + '" style="margin-bottom: 8px;">';
+        var existingReviewers = post.externalApprovals || [];
+        if (existingReviewers.length === 0) {
+          html += buildExtReviewerRow(postId, 0, {});
+        } else {
+          existingReviewers.forEach(function(r, idx) { html += buildExtReviewerRow(postId, idx, r); });
+        }
         html += '</div>';
-        html += '</div>';
-        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 8px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save External Approval</button>';
+        html += '<button type="button" onclick="addExtReviewerRow(\'' + postId + '\')" style="padding: 6px 14px; background: white; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 10px; margin-right: 8px;">+ Add Reviewer</button>';
+        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 6px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save</button>';
       } else {
         html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
       }
@@ -1503,18 +1514,21 @@
       const urlParams = new URLSearchParams(window.location.search);
       const token = '<?= accessToken ?>' || urlParams.get('token');
 
-      // AUTO-SAVE: Check if external approval fields are filled and save them first
-      const externalApproverField = document.getElementById('externalApprover_' + postId);
-      const externalApprovalDateField = document.getElementById('externalApprovalDate_' + postId);
-
-      let externalApprover = '';
-      let externalApprovalDate = '';
-
-      if (externalApproverField) {
-        externalApprover = externalApproverField.value.trim();
-      }
-      if (externalApprovalDateField) {
-        externalApprovalDate = externalApprovalDateField.value;
+      // AUTO-SAVE: Collect external reviewer rows if present
+      let reviewersJson = '';
+      const extContainer = document.getElementById('extReviewerRows_' + postId);
+      if (extContainer) {
+        const reviewers = [];
+        extContainer.querySelectorAll('.ext-reviewer-row').forEach(function(row) {
+          const inputs = row.querySelectorAll('input');
+          const name = inputs[1].value.trim();
+          const sentDate = inputs[2].value;
+          const approvalDate = inputs[3].value;
+          if (name || sentDate || approvalDate) {
+            reviewers.push({ name: name, sentDate: sentDate, approvalDate: approvalDate, required: inputs[0].checked ? 'Yes' : 'No' });
+          }
+        });
+        if (reviewers.length > 0) reviewersJson = JSON.stringify(reviewers);
       }
 
       // Show loading state
@@ -1568,8 +1582,7 @@
         '&decision=' + encodeURIComponent(decision) +
         '&notes=' + encodeURIComponent(notes) +
         '&commentType=' + encodeURIComponent(commentType || '') +
-        '&externalApprover=' + encodeURIComponent(externalApprover) +
-        '&externalApprovalDate=' + encodeURIComponent(externalApprovalDate) +
+        '&reviewersJson=' + encodeURIComponent(reviewersJson) +
         '&callback=' + callbackName;
       script.onerror = function() {
         window.isSubmittingApproval = false;
@@ -2191,33 +2204,44 @@
       html += '<div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">';
       html += '<p style="margin: 0 0 12px 0; font-size: 13px; color: #5f6368;">Use this section to record when your manager, supervisor, or other stakeholder approves this post.</p>';
 
-      // Show current external approval if exists
-      if (post.External_Approver || post.External_Approval_Date) {
+      // Show current external approvals if any
+      if (post.externalApprovals && post.externalApprovals.length > 0) {
         html += '<div style="background: #e8f5e9; padding: 12px; border-radius: 4px; border-left: 3px solid #34a853; margin-bottom: 12px;">';
-        html += '<p style="margin: 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Recorded</p>';
-        if (post.External_Approver) {
-          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approved by: ' + escapeHtml(post.External_Approver) + '</p>';
-        }
-        if (post.External_Approval_Date) {
-          var externalDate = new Date(post.External_Approval_Date);
-          html += '<p style="margin: 4px 0 0 0; font-size: 12px; color: #137333;">Approval date: ' + externalDate.toLocaleDateString() + '</p>';
-        }
+        html += '<p style="margin: 0 0 8px 0; font-size: 13px; font-weight: 500; color: #1e8e3e;">✓ External Approval Tracking</p>';
+        post.externalApprovals.forEach(function(r) {
+          html += '<div style="background: white; padding: 8px 10px; border-radius: 4px; border: 1px solid #c8e6c9; margin-bottom: 6px;">';
+          html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">';
+          html += '<strong style="font-size: 13px; color: #202124;">' + escapeHtml(r.Approver_Name || 'Unnamed') + '</strong>';
+          if (r.Required === 'Yes') html += '<span style="background: #ea4335; color: white; padding: 1px 6px; border-radius: 3px; font-size: 11px; font-weight: 600;">⚠️ REQUIRED</span>';
+          html += '</div>';
+          if (r.Sent_Date) html += '<p style="margin: 2px 0; font-size: 12px; color: #5f6368;">Sent: ' + new Date(r.Sent_Date).toLocaleDateString() + '</p>';
+          if (r.Approval_Date) html += '<p style="margin: 2px 0; font-size: 12px; color: #137333;">✓ Approved: ' + new Date(r.Approval_Date).toLocaleDateString() + '</p>';
+          html += '</div>';
+        });
         html += '</div>';
       }
 
       // Form to record/update external approval (only for Client Admins)
       if (clientInfo && clientInfo.Is_Admin) {
-        html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">';
-        html += '<div>';
-        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approver Name/Title</label>';
-        html += '<input type="text" id="externalApprover_' + postId + '" value="' + escapeHtml(post.External_Approver || '') + '" placeholder="e.g., Tammy Johnson, VP" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        // Reviewer rows header
+        html += '<div style="display: grid; grid-template-columns: auto 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 4px; padding: 0 4px;">';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Required</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Name/Title</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Sent Date</span>';
+        html += '<span style="font-size: 11px; font-weight: 600; color: #5f6368;">Approval Date</span>';
+        html += '<span></span>';
         html += '</div>';
-        html += '<div>';
-        html += '<label style="display: block; font-weight: 600; margin-bottom: 6px; color: #5f6368; font-size: 13px;">Approval Date</label>';
-        html += '<input type="date" id="externalApprovalDate_' + postId + '" value="' + (post.External_Approval_Date || '') + '" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; box-sizing: border-box;">';
+        // Reviewer rows container
+        html += '<div id="extReviewerRows_' + postId + '" style="margin-bottom: 8px;">';
+        var existingReviewers = post.externalApprovals || [];
+        if (existingReviewers.length === 0) {
+          html += buildExtReviewerRow(postId, 0, {});
+        } else {
+          existingReviewers.forEach(function(r, idx) { html += buildExtReviewerRow(postId, idx, r); });
+        }
         html += '</div>';
-        html += '</div>';
-        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 8px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save External Approval</button>';
+        html += '<button type="button" onclick="addExtReviewerRow(\'' + postId + '\')" style="padding: 6px 14px; background: white; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 10px; margin-right: 8px;">+ Add Reviewer</button>';
+        html += '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" style="padding: 6px 16px; background: #34a853; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;">💾 Save</button>';
       } else {
         html += '<p style="margin: 8px 0 0 0; font-size: 12px; color: #5f6368; font-style: italic;">Only client administrators can record external approvals.</p>';
       }
@@ -2388,80 +2412,94 @@
       document.body.appendChild(script);
     }
 
+    function buildExtReviewerRow(postId, idx, data) {
+      var rowId = 'extRow_' + postId + '_' + idx + '_' + Date.now();
+      var sentVal = data.Sent_Date ? new Date(data.Sent_Date).toISOString().substring(0, 10) : '';
+      var approvalVal = data.Approval_Date ? new Date(data.Approval_Date).toISOString().substring(0, 10) : '';
+      var html = '<div id="' + rowId + '" class="ext-reviewer-row" style="display: grid; grid-template-columns: auto 1fr 1fr 1fr auto; gap: 6px; align-items: center; margin-bottom: 6px; padding: 6px; background: #f8f9fa; border: 1px solid #e8eaed; border-radius: 4px;">';
+      html += '<label style="display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; cursor: pointer;"><input type="checkbox" ' + (data.Required === 'Yes' ? 'checked' : '') + ' style="width: 14px; height: 14px;"> Req</label>';
+      html += '<input type="text" placeholder="Name/Title" value="' + escapeHtml(data.Approver_Name || '') + '" style="padding: 5px 7px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box;">';
+      html += '<input type="date" value="' + sentVal + '" style="padding: 5px 7px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box;">';
+      html += '<input type="date" value="' + approvalVal + '" style="padding: 5px 7px; border: 1px solid #dadce0; border-radius: 4px; font-size: 13px; width: 100%; box-sizing: border-box;">';
+      html += '<button type="button" onclick="document.getElementById(\'' + rowId + '\').remove()" style="background: none; border: none; cursor: pointer; color: #ea4335; font-size: 20px; line-height: 1; padding: 0 2px;" title="Remove">×</button>';
+      html += '</div>';
+      return html;
+    }
+
+    function addExtReviewerRow(postId) {
+      var container = document.getElementById('extReviewerRows_' + postId);
+      if (!container) return;
+      var div = document.createElement('div');
+      div.innerHTML = buildExtReviewerRow(postId, container.children.length, {});
+      container.appendChild(div.firstChild);
+    }
+
     /**
      * Save external approval tracking (for Client Admins)
      */
     function saveExternalApproval(postId) {
-      // Prevent duplicate submissions
-      if (window.isSubmittingExternalApproval) {
-        return;
-      }
+      if (window.isSubmittingExternalApproval) return;
 
-      const externalApprover = document.getElementById('externalApprover_' + postId).value.trim();
-      const externalApprovalDate = document.getElementById('externalApprovalDate_' + postId).value;
+      var container = document.getElementById('extReviewerRows_' + postId);
+      if (!container) { alert('Reviewer form not found.'); return; }
 
-      // At least one field must be filled
-      if (!externalApprover && !externalApprovalDate) {
-        alert('Please enter at least an approver name or approval date.');
+      var reviewers = [];
+      var rows = container.querySelectorAll('.ext-reviewer-row');
+      rows.forEach(function(row) {
+        var inputs = row.querySelectorAll('input');
+        var required = inputs[0].checked ? 'Yes' : 'No';
+        var name = inputs[1].value.trim();
+        var sentDate = inputs[2].value;
+        var approvalDate = inputs[3].value;
+        if (name || sentDate || approvalDate) {
+          reviewers.push({ name: name, sentDate: sentDate, approvalDate: approvalDate, required: required });
+        }
+      });
+
+      if (reviewers.length === 0) {
+        alert('Please fill in at least one reviewer name or date.');
         return;
       }
 
       window.isSubmittingExternalApproval = true;
+      const reviewersJson = JSON.stringify(reviewers);
 
-      // Show loading state
       const modalBody = document.getElementById('modalBody');
       const originalContent = modalBody.innerHTML;
-      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Saving external approval...</p></div>';
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Saving external approvals...</p></div>';
 
       const urlParams = new URLSearchParams(window.location.search);
       const token = '<?= accessToken ?>' || urlParams.get('token');
 
-      // Create JSONP callback
       const callbackName = 'externalApprovalCallback_' + Date.now();
       window[callbackName] = function(data) {
-        console.log('External Approval API Response:', data);
-
         if (data.success) {
-          // Show success message and reload the post
           modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
-            '<h3 style="color: #34a853; margin-bottom: 16px;">✓ External Approval Saved!</h3>' +
-            '<p>External approval tracking has been recorded.</p>' +
+            '<h3 style="color: #34a853; margin-bottom: 16px;">✓ Saved!</h3>' +
+            '<p>External approval tracking has been updated.</p>' +
             '<p style="margin-top: 16px;"><button type="button" onclick="reloadPostAfterEdit(\'' + postId + '\');" class="submit-btn">Continue</button></p>' +
             '</div>';
         } else {
-          modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
-            '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
-            '<p>' + (data.error || 'Failed to save external approval. Please try again.') + '</p>' +
-            '<p style="margin-top: 16px;">' +
-            '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
-            '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
-            '</p></div>';
+          modalBody.innerHTML = originalContent;
+          alert('Error saving: ' + (data.error || 'Unknown error'));
         }
-
         window.isSubmittingExternalApproval = false;
         delete window[callbackName];
         const script = document.getElementById('externalApprovalScript');
         if (script) document.body.removeChild(script);
       };
 
-      // Call API via JSONP
       const script = document.createElement('script');
       script.id = 'externalApprovalScript';
       script.src = API_URL + '?action=saveExternalApproval' +
         '&token=' + encodeURIComponent(token) +
         '&postId=' + encodeURIComponent(postId) +
-        '&externalApprover=' + encodeURIComponent(externalApprover) +
-        '&externalApprovalDate=' + encodeURIComponent(externalApprovalDate) +
+        '&reviewersJson=' + encodeURIComponent(reviewersJson) +
         '&callback=' + callbackName;
       script.onerror = function() {
         window.isSubmittingExternalApproval = false;
-        modalBody.innerHTML = '<div style="padding: 40px; text-align: center;">' +
-          '<h3 style="color: #ea4335; margin-bottom: 16px;">Error</h3>' +
-          '<p>Failed to connect to server. Please check your connection and try again.</p>' +
-          '<p style="margin-top: 16px;">' +
-          '<button type="button" onclick="saveExternalApproval(\'' + postId + '\')" class="submit-btn" style="margin-right: 8px;">Try Again</button>' +
-          '<button type="button" onclick="closePostDetail(); loadClientData();" class="submit-btn" style="background: #5f6368;">Close</button>' +
-          '</p></div>';
+        modalBody.innerHTML = originalContent;
+        alert('Connection error. Please try again.');
         delete window[callbackName];
       };
       document.body.appendChild(script);

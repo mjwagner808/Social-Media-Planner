@@ -451,6 +451,34 @@ function getClientPosts(clientId, authorizedClient) {
     }
 
     Logger.log('Found ' + posts.length + ' posts for client: ' + clientId);
+
+    // Attach external approvals to each post
+    try {
+      var extSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('External_Approvals');
+      if (extSheet && extSheet.getLastRow() > 1) {
+        var extData = extSheet.getDataRange().getValues();
+        var extHeaders = extData[0];
+        var extPostIdIdx = extHeaders.indexOf('Post_ID');
+        var extByPost = {};
+        for (var ei = 1; ei < extData.length; ei++) {
+          var ePid = extData[ei][extPostIdIdx];
+          if (!extByPost[ePid]) extByPost[ePid] = [];
+          var extObj = {};
+          extHeaders.forEach(function(h, hi) {
+            var v = extData[ei][hi];
+            extObj[h] = v instanceof Date ? v.toISOString() : v;
+          });
+          extByPost[ePid].push(extObj);
+        }
+        posts.forEach(function(p) { p.externalApprovals = extByPost[p.ID] || []; });
+      } else {
+        posts.forEach(function(p) { p.externalApprovals = []; });
+      }
+    } catch (extErr) {
+      Logger.log('Warning: Could not load external approvals: ' + extErr.message);
+      posts.forEach(function(p) { p.externalApprovals = []; });
+    }
+
     return posts;
 
   } catch (e) {

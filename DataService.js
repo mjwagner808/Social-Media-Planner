@@ -893,6 +893,15 @@ function getPostById(postId) {
       post.approvalHistory = [];
     }
 
+    // Get external approvals for this post
+    try {
+      post.externalApprovals = getExternalApprovalsForPost(postId);
+      Logger.log('External approvals loaded: ' + post.externalApprovals.length);
+    } catch (extError) {
+      Logger.log('Error loading external approvals: ' + extError.message);
+      post.externalApprovals = [];
+    }
+
     // Final pass: convert ALL remaining date objects to strings
     // This ensures nested objects (client, subsidiaries, categories, platforms) are serializable
     var finalPost = JSON.parse(JSON.stringify(post, function(key, value) {
@@ -921,7 +930,7 @@ function getPostById(postId) {
  * @param {string} commentType - The comment type (optional, defaults to 'Internal_Note')
  * @returns {Object} - {success: true} or error
  */
-function addCommentToPost(postId, commentText, commentType) {
+function addCommentToPost(postId, commentText, commentType, notifyEmail) {
   try {
     Logger.log('Adding comment to post: ' + postId);
     Logger.log('Comment type: ' + (commentType || 'Internal_Note'));
@@ -1025,6 +1034,23 @@ function addCommentToPost(postId, commentText, commentType) {
       } catch (notifError) {
         Logger.log('Warning: Failed to create notifications: ' + notifError.message);
         // Don't fail the comment creation if notifications fail
+      }
+    }
+
+    // Send direct email notification to tagged team member
+    if (notifyEmail && notifyEmail !== currentUser) {
+      try {
+        var postForNotify = _getPostByIdSimple(postId);
+        var postTitle = postForNotify ? (postForNotify.Post_Title || postId) : postId;
+        var commenterName = getUserFullName(currentUser) || currentUser;
+        sendEmail(
+          notifyEmail,
+          commenterName + ' sent you a note on: ' + postTitle,
+          commenterName + ' wants your attention on "' + postTitle + '":\n\n"' + commentText + '"\n\nLog in to Social Media Planner to view the post.'
+        );
+        Logger.log('Notify email sent to: ' + notifyEmail);
+      } catch (emailError) {
+        Logger.log('Warning: Failed to send notify email: ' + emailError.message);
       }
     }
 

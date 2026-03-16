@@ -75,8 +75,7 @@ function doGet(e) {
       Logger.log('Post ID: ' + e.parameter.postId);
       Logger.log('Decision: ' + e.parameter.decision);
       Logger.log('Notes: ' + (e.parameter.notes || ''));
-      Logger.log('External Approver: ' + (e.parameter.externalApprover || ''));
-      Logger.log('External Approval Date: ' + (e.parameter.externalApprovalDate || ''));
+      Logger.log('Reviewers JSON: ' + (e.parameter.reviewersJson || ''));
 
       const result = handleClientApproval(
         token,
@@ -84,8 +83,7 @@ function doGet(e) {
         e.parameter.decision,
         e.parameter.notes || '',
         e.parameter.commentType || '',
-        e.parameter.externalApprover || '',
-        e.parameter.externalApprovalDate || ''
+        e.parameter.reviewersJson || ''
       );
 
       Logger.log('handleClientApproval returned: ' + JSON.stringify(result));
@@ -235,8 +233,7 @@ function doGet(e) {
       const result = handleExternalApproval(
         token,
         e.parameter.postId,
-        e.parameter.externalApprover || '',
-        e.parameter.externalApprovalDate || ''
+        e.parameter.reviewersJson || ''
       );
 
       Logger.log('handleExternalApproval returned: ' + JSON.stringify(result));
@@ -794,11 +791,10 @@ function validateClientAccess(token) {
  * @param {string} decision - 'Approved' or 'Changes_Requested'
  * @param {string} notes - Client comments
  * @param {string} commentType - Comment type
- * @param {string} externalApprover - External approver name/title (optional, auto-saved)
- * @param {string} externalApprovalDate - External approval date (optional, auto-saved)
+ * @param {string} reviewersJson - JSON string of external reviewer data (optional, auto-saved)
  * @returns {Object} - {success: true/false, message: string}
  */
-function handleClientApproval(token, postId, decision, notes, commentType, externalApprover, externalApprovalDate) {
+function handleClientApproval(token, postId, decision, notes, commentType, reviewersJson) {
   try {
     Logger.log('=== HANDLING CLIENT APPROVAL ===');
     Logger.log('Token: ' + token);
@@ -806,8 +802,7 @@ function handleClientApproval(token, postId, decision, notes, commentType, exter
     Logger.log('Decision: ' + decision);
     Logger.log('Notes: ' + notes);
     Logger.log('Comment Type: ' + commentType);
-    Logger.log('External Approver: ' + (externalApprover || '(none)'));
-    Logger.log('External Approval Date: ' + (externalApprovalDate || '(none)'));
+    Logger.log('Reviewers JSON: ' + (reviewersJson || '(none)'));
 
     // Validate token
     const authorizedClient = validateClientToken(token);
@@ -827,64 +822,12 @@ function handleClientApproval(token, postId, decision, notes, commentType, exter
 
     Logger.log('Post validated: ' + post.Post_Title + ', Client: ' + post.Client_ID);
 
-    // AUTO-SAVE: Save external approval data if provided (before processing approval decision)
-    if (externalApprover || externalApprovalDate) {
-      Logger.log('External approval data provided - auto-saving...');
-
+    // AUTO-SAVE: Save external approval data if provided
+    if (reviewersJson) {
       try {
-        const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-        const postsSheet = ss.getSheetByName('Posts');
-        const data = postsSheet.getDataRange().getValues();
-        const headers = data[0];
-
-        // Find the post row
-        let rowIndex = -1;
-        for (let i = 1; i < data.length; i++) {
-          if (data[i][0] === postId) {
-            rowIndex = i;
-            break;
-          }
-        }
-
-        if (rowIndex !== -1) {
-          // Find or create columns
-          let externalApproverCol = headers.indexOf('External_Approver');
-          let externalApprovalDateCol = headers.indexOf('External_Approval_Date');
-
-          if (externalApproverCol === -1) {
-            externalApproverCol = headers.length;
-            postsSheet.getRange(1, externalApproverCol + 1).setValue('External_Approver');
-          }
-
-          if (externalApprovalDateCol === -1) {
-            externalApprovalDateCol = headers.length + (externalApproverCol === headers.length ? 1 : 0);
-            postsSheet.getRange(1, externalApprovalDateCol + 1).setValue('External_Approval_Date');
-          }
-
-          // Save the values
-          if (externalApprover) {
-            postsSheet.getRange(rowIndex + 1, externalApproverCol + 1).setValue(externalApprover);
-            Logger.log('✅ Saved External_Approver: ' + externalApprover);
-          }
-
-          if (externalApprovalDate) {
-            // Parse date string and create UTC-normalized date to prevent timezone shifts
-            // Input format: YYYY-MM-DD from date picker
-            const dateParts = externalApprovalDate.split('-');
-            const year = parseInt(dateParts[0], 10);
-            const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-            const day = parseInt(dateParts[2], 10);
-            // Create date at noon UTC to avoid timezone boundary issues
-            const dateObj = new Date(Date.UTC(year, month, day, 12, 0, 0));
-            postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue(dateObj);
-            Logger.log('✅ Saved External_Approval_Date: ' + externalApprovalDate + ' as ' + dateObj.toISOString());
-          }
-        } else {
-          Logger.log('⚠️ Could not find post row for external approval save');
-        }
-      } catch (externalApprovalError) {
-        Logger.log('⚠️ Failed to auto-save external approval: ' + externalApprovalError.message);
-        // Don't fail the entire operation if external approval save fails
+        saveExternalApprovals(postId, reviewersJson);
+      } catch (extSaveError) {
+        Logger.log('⚠️ Failed to auto-save external approvals: ' + extSaveError.message);
       }
     }
 
@@ -1179,102 +1122,24 @@ function handleClientEdit(token, postId, postCopy, hashtags) {
  * Handle external approval tracking (client admin only)
  * Saves external approver name/title and approval date for client tracking
  */
-function handleExternalApproval(token, postId, externalApprover, externalApprovalDate) {
+function handleExternalApproval(token, postId, reviewersJson) {
   try {
-    Logger.log('=== HANDLING EXTERNAL APPROVAL ===');
-    Logger.log('Token: ' + token);
-    Logger.log('Post ID: ' + postId);
-    Logger.log('External Approver: ' + externalApprover);
-    Logger.log('External Approval Date: ' + externalApprovalDate);
+    Logger.log('=== HANDLING EXTERNAL APPROVAL (multi-reviewer) ===');
 
-    // Validate token
     const authorizedClient = validateClientToken(token);
     if (!authorizedClient) {
       return {success: false, error: 'Invalid or expired access token'};
     }
 
-    Logger.log('Authorized client: ' + authorizedClient.Email + ', Client: ' + authorizedClient.Client_ID);
-
-    // Verify client is an Admin
-    if (authorizedClient.Access_Level !== 'Admin') {
-      return {success: false, error: 'Only Client Admins can record external approvals'};
-    }
-
-    // Get all posts accessible to this client
     const clientPosts = getClientPosts(authorizedClient.Client_ID, authorizedClient);
     const post = clientPosts.find(function(p) { return p.ID === postId; });
-
     if (!post) {
-      return {success: false, error: 'Post not found or you do not have access to this post'};
+      return {success: false, error: 'Post not found or access denied'};
     }
 
-    Logger.log('Post validated: ' + post.Post_Title);
-
-    // Update External_Approver and External_Approval_Date in the Posts sheet
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const postsSheet = ss.getSheetByName('Posts');
-    const data = postsSheet.getDataRange().getValues();
-    const headers = data[0];
-
-    // Find the post row
-    let rowIndex = -1;
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === postId) {
-        rowIndex = i;
-        break;
-      }
-    }
-
-    if (rowIndex === -1) {
-      return {success: false, error: 'Post not found in sheet'};
-    }
-
-    // Find column indices
-    let externalApproverCol = headers.indexOf('External_Approver');
-    let externalApprovalDateCol = headers.indexOf('External_Approval_Date');
-
-    // If columns don't exist, add them
-    if (externalApproverCol === -1) {
-      Logger.log('External_Approver column not found, adding it');
-      externalApproverCol = headers.length;
-      postsSheet.getRange(1, externalApproverCol + 1).setValue('External_Approver');
-    }
-
-    if (externalApprovalDateCol === -1) {
-      Logger.log('External_Approval_Date column not found, adding it');
-      externalApprovalDateCol = headers.length + (externalApproverCol === headers.length ? 1 : 0);
-      postsSheet.getRange(1, externalApprovalDateCol + 1).setValue('External_Approval_Date');
-    }
-
-    // Update the values
-    postsSheet.getRange(rowIndex + 1, externalApproverCol + 1).setValue(externalApprover);
-
-    // Parse and set date if provided
-    if (externalApprovalDate) {
-      // Parse date string and create UTC-normalized date to prevent timezone shifts
-      // Input format: YYYY-MM-DD from date picker
-      const dateParts = externalApprovalDate.split('-');
-      const year = parseInt(dateParts[0], 10);
-      const month = parseInt(dateParts[1], 10) - 1; // Month is 0-indexed
-      const day = parseInt(dateParts[2], 10);
-      // Create date at noon UTC to avoid timezone boundary issues
-      const dateObj = new Date(Date.UTC(year, month, day, 12, 0, 0));
-      postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue(dateObj);
-      Logger.log('External approval date normalized: ' + externalApprovalDate + ' → ' + dateObj.toISOString());
-    } else {
-      postsSheet.getRange(rowIndex + 1, externalApprovalDateCol + 1).setValue('');
-    }
-
-    Logger.log('✅ External approval tracking updated successfully');
-
-    return {
-      success: true,
-      message: 'External approval tracking saved successfully'
-    };
-
+    return saveExternalApprovals(postId, reviewersJson);
   } catch (e) {
-    Logger.log('❌ ERROR in handleExternalApproval: ' + e.message);
-    Logger.log('Stack: ' + e.stack);
+    Logger.log('Error in handleExternalApproval: ' + e.message);
     return {success: false, error: e.message};
   }
 }
@@ -3349,4 +3214,67 @@ function updatePostReviewersForAdmin(token, postId, reviewerIds) {
     Logger.log('Error updating post reviewers: ' + e.message);
     return {success: false, error: e.message};
   }
+}
+
+function getExternalApprovalsForPost(postId) {
+  try {
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('External_Approvals');
+    if (!sheet || sheet.getLastRow() <= 1) return [];
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var result = [];
+    for (var i = 1; i < data.length; i++) {
+      var obj = {};
+      headers.forEach(function(h, idx) {
+        var val = data[i][idx];
+        obj[h] = val instanceof Date ? val.toISOString() : val;
+      });
+      if (obj.Post_ID === postId) result.push(obj);
+    }
+    return result;
+  } catch (e) {
+    Logger.log('Error getting external approvals: ' + e.message);
+    return [];
+  }
+}
+
+function saveExternalApprovals(postId, reviewersJson) {
+  try {
+    var reviewers = [];
+    try { reviewers = JSON.parse(reviewersJson || '[]'); } catch (pe) { reviewers = []; }
+
+    var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    var sheet = ss.getSheetByName('External_Approvals');
+    if (!sheet) {
+      sheet = ss.insertSheet('External_Approvals');
+      sheet.appendRow(['ID', 'Post_ID', 'Approver_Name', 'Sent_Date', 'Approval_Date', 'Required']);
+    }
+
+    // Delete existing rows for this post (bottom-to-top to avoid row shift)
+    var data = sheet.getDataRange().getValues();
+    var postIdCol = data[0].indexOf('Post_ID');
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (data[i][postIdCol] === postId) sheet.deleteRow(i + 1);
+    }
+
+    // Insert new rows
+    reviewers.forEach(function(r) {
+      var sentDate = r.sentDate ? _parseExtDate_(r.sentDate) : '';
+      var approvalDate = r.approvalDate ? _parseExtDate_(r.approvalDate) : '';
+      sheet.appendRow([generateId('EXT'), postId, r.name || '', sentDate, approvalDate, r.required || '']);
+    });
+
+    return { success: true };
+  } catch (e) {
+    Logger.log('Error saving external approvals: ' + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+function _parseExtDate_(dateStr) {
+  if (!dateStr) return '';
+  var p = dateStr.split('-');
+  if (p.length !== 3) return '';
+  return new Date(Date.UTC(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]), 12));
 }

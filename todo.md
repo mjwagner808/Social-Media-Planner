@@ -312,6 +312,32 @@ Added external approval tracking display to the agency-side post detail modal. W
 
 ---
 
+## Multiple External Reviewers Feature - COMPLETED ✅ (March 15, 2026)
+
+### Summary
+
+Upgraded external approval tracking from single-reviewer (flat columns on Posts sheet) to multi-reviewer (separate `External_Approvals` sheet). Client Admins can now add, remove, and track multiple external stakeholders per post — each with their own Name/Title, Sent Date, Approval Date, and Required flag.
+
+### What Changed
+
+**New data model:** Separate `External_Approvals` sheet (auto-created on first save) with columns: `ID`, `Post_ID`, `Approver_Name`, `Sent_Date`, `Approval_Date`, `Required`. Old flat columns on Posts sheet are no longer written to for new data.
+
+**Files modified:**
+
+- **Code.js** — Added `getExternalApprovalsForPost(postId)`, `saveExternalApprovals(postId, reviewersJson)`, `_parseExtDate_(dateStr)` functions at bottom. Rewrote `handleExternalApproval` to delegate to `saveExternalApprovals`. Updated `handleClientApproval` signature and auto-save block to use `reviewersJson`. Updated both JSONP dispatch blocks to pass `reviewersJson` instead of 4 separate params.
+- **DataService.js** — Added `externalApprovals` load in `getPostById` after approval history block.
+- **ClientAuthService.js** — Added `externalApprovals` attachment loop in `getClientPosts` before final `return posts`.
+- **client-portal.html** — Replaced single-field display with per-reviewer card display (both occurrences). Replaced single-field form with multi-row grid UI using `buildExtReviewerRow` / `addExtReviewerRow` helpers (both occurrences). Rewrote `saveExternalApproval` to collect rows and send `reviewersJson`. Updated `submitApprovalDecision` auto-save to collect reviewer rows.
+- **Index.html** — Updated external approval display section to iterate `post.externalApprovals` array instead of reading flat `post.External_Approver` etc. fields.
+
+### Deployment Required
+
+- Push completed via `clasp push`.
+- **Must deploy a new version** in Apps Script UI: Deploy → Manage Deployments → New Version → Deploy.
+- Test in Incognito window after deploy.
+
+---
+
 ## Smartsheet Import - Multi-Week Processing - COMPLETED ✅ (December 23, 2025)
 
 ### Summary

@@ -1941,6 +1941,7 @@
       // Server-side values (force-print with JavaScript string escaping)
       const userName = "<?!= userName.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
       const userRole = "<?!= userRole.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
+      const currentUserEmail = "<?!= userEmail.replace(/"/g, '\\"').replace(/\n/g, '\\n') ?>";
 
       // Global state
       let currentMonth = new Date().getMonth();
@@ -1951,6 +1952,7 @@
       let currentStatusFilter = 'all';
       let currentPostId = null; // Track which post is currently being viewed in detail modal
       let allTemplates = []; // Store post templates
+      let cachedAgencyUsers = null; // Cache for notify dropdown
 
       // Cache for calendar data
       let calendarDataCache = {
@@ -4196,8 +4198,8 @@
               html += '<p style="margin: 0 0 4px 0; font-size: 12px; color: #5f6368;"><strong>Date:</strong> ' + decisionDate + '</p>';
             }
 
-            if (approval.Approval_Notes) {
-              html += '<p style="margin: 8px 0 0 0; font-size: 13px; font-style: italic; color: #202124;">"' + escapeHtml(approval.Approval_Notes) + '"</p>';
+            if (approval.Decision_Notes) {
+              html += '<p style="margin: 8px 0 0 0; font-size: 13px; font-style: italic; color: #202124;">"' + escapeHtml(approval.Decision_Notes) + '"</p>';
             }
 
             html += '</div>';
@@ -4210,22 +4212,43 @@
         }
         html += '</div>';
 
-        // External Approval Tracking (client's internal approvals)
-        if (post.External_Approver || post.External_Approval_Date) {
+        // External Approval Tracking
+        if (post.externalApprovals && post.externalApprovals.length > 0) {
           html += '<div class="detail-section" style="background: #e8f5e9; padding: 16px; border-radius: 4px; border-left: 3px solid #34a853;">';
-          html += '<h4 style="margin: 0 0 12px 0; color: #137333;">✓ External Approval Tracked</h4>';
-          html += '<p style="margin: 0 0 8px 0; font-size: 13px; color: #5f6368;">The client has recorded internal approval for this post:</p>';
+          html += '<h4 style="margin: 0 0 12px 0; color: #137333;">✓ External Approval Tracking</h4>';
+          post.externalApprovals.forEach(function(r) {
+            html += '<div style="background: white; padding: 10px 12px; border-radius: 4px; border: 1px solid #c8e6c9; margin-bottom: 8px;">';
+            html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">';
+            html += '<strong style="font-size: 14px;">' + escapeHtml(r.Approver_Name || 'Unnamed') + '</strong>';
+            if (r.Required === 'Yes') html += '<span style="background: #ea4335; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;">⚠️ REQUIRED</span>';
+            html += '</div>';
+            if (r.Sent_Date) html += '<p style="margin: 2px 0; font-size: 13px; color: #5f6368;"><strong>Sent:</strong> ' + new Date(r.Sent_Date).toLocaleDateString() + '</p>';
+            if (r.Approval_Date) html += '<p style="margin: 2px 0; font-size: 13px; color: #137333;"><strong>✓ Approved:</strong> ' + new Date(r.Approval_Date).toLocaleDateString() + '</p>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
 
-          if (post.External_Approver) {
-            html += '<p style="margin: 0 0 4px 0; font-size: 14px;"><strong>Approved by:</strong> ' + escapeHtml(post.External_Approver) + '</p>';
+        // "Your Approval Required" section (only if current user has a pending approval)
+        var myPendingApproval = null;
+        if (post.approvalHistory) {
+          for (var api = 0; api < post.approvalHistory.length; api++) {
+            var ap = post.approvalHistory[api];
+            if (ap.Approver_Email === currentUserEmail && ap.Approval_Status === 'Pending') {
+              myPendingApproval = ap;
+              break;
+            }
           }
-
-          if (post.External_Approval_Date) {
-            var externalDate = new Date(post.External_Approval_Date);
-            html += '<p style="margin: 0; font-size: 14px;"><strong>Approval date:</strong> ' + externalDate.toLocaleDateString() + '</p>';
-          }
-
-          html += '<p style="margin: 12px 0 0 0; font-size: 12px; color: #137333; font-style: italic;">ℹ️ This represents the client\'s internal approval process (e.g., manager/supervisor sign-off)</p>';
+        }
+        if (myPendingApproval) {
+          html += '<div class="detail-section" style="background: #fff8e1; padding: 16px; border-radius: 4px; border-left: 4px solid #f9ab00;">';
+          html += '<h4 style="margin: 0 0 12px 0; color: #b06000;">⏳ Your Approval Required</h4>';
+          html += '<p style="font-size: 13px; color: #5f6368; margin-bottom: 12px;">Stage: <strong>' + (myPendingApproval.Approval_Stage === 'Internal' ? 'Internal Review' : 'Client Review') + '</strong></p>';
+          html += '<textarea id="postDetailApprovalComment" style="width: 100%; min-height: 80px; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 12px;" placeholder="Add comments (optional for approval, recommended for changes)..."></textarea>';
+          html += '<div>';
+          html += '<button onclick="approveFromPostDetail(\'' + myPendingApproval.ID + '\', \'' + post.ID + '\', \'Approved\')" style="background: #34a853; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; margin-right: 8px;">✓ Approve</button>';
+          html += '<button onclick="approveFromPostDetail(\'' + myPendingApproval.ID + '\', \'' + post.ID + '\', \'Changes_Requested\')" style="background: #ea4335; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600;">✗ Request Changes</button>';
+          html += '</div>';
           html += '</div>';
         }
 
@@ -4288,6 +4311,10 @@
         html += '<div style="margin-bottom: 12px;">';
         html += '<label style="display: block; margin-bottom: 4px; font-weight: 500;">Your Comment:</label>';
         html += '<textarea id="commentTextInput" style="width: 100%; min-height: 80px; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-family: inherit; resize: vertical;" placeholder="Enter your comment..."></textarea>';
+        html += '</div>';
+        html += '<div style="margin-bottom: 12px;">';
+        html += '<label style="display: block; margin-bottom: 4px; font-weight: 500;">Notify team member <small style="color:#9aa0a6; font-weight: 400;">(optional)</small>:</label>';
+        html += '<select id="notifyUserSelect" style="width: 100%; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px;"><option value="">-- No notification --</option></select>';
         html += '</div>';
         html += '<div style="display: flex; gap: 8px;">';
         html += '<button class="btn btn-primary" type="button" onclick="submitComment(\'' + post.ID + '\')">Submit Comment</button>';
@@ -5172,12 +5199,46 @@
         document.getElementById('commentForm').style.display = 'block';
         document.getElementById('addCommentBtn').style.display = 'none';
         document.getElementById('commentTextInput').focus();
+
+        // Populate notify dropdown (load once, then cache)
+        const select = document.getElementById('notifyUserSelect');
+        if (select && select.options.length <= 1) {
+          if (cachedAgencyUsers) {
+            populateNotifyDropdown(cachedAgencyUsers);
+          } else {
+            select.innerHTML = '<option value="">Loading...</option>';
+            google.script.run
+              .withSuccessHandler(function(users) {
+                cachedAgencyUsers = users;
+                populateNotifyDropdown(users);
+              })
+              .withFailureHandler(function() {
+                select.innerHTML = '<option value="">-- No notification --</option>';
+              })
+              .getAllUsers();
+          }
+        }
+      }
+
+      function populateNotifyDropdown(users) {
+        const select = document.getElementById('notifyUserSelect');
+        if (!select) return;
+        select.innerHTML = '<option value="">-- No notification --</option>';
+        users.forEach(function(user) {
+          if (user.Email !== currentUserEmail) {
+            const option = document.createElement('option');
+            option.value = user.Email;
+            option.textContent = user.Full_Name || user.Email;
+            select.appendChild(option);
+          }
+        });
       }
 
       function cancelComment() {
         document.getElementById('commentForm').style.display = 'none';
         document.getElementById('addCommentBtn').style.display = 'inline-flex';
         document.getElementById('commentTextInput').value = '';
+        document.getElementById('notifyUserSelect').value = '';
         // Reset to default radio button
         document.querySelector('input[name="commentType"][value="Internal_Note"]').checked = true;
       }
@@ -5192,6 +5253,7 @@
         // Get selected comment type
         const selectedType = document.querySelector('input[name="commentType"]:checked');
         const commentType = selectedType ? selectedType.value : 'Internal_Note';
+        const notifyEmail = document.getElementById('notifyUserSelect') ? document.getElementById('notifyUserSelect').value : '';
 
         // Show loading state
         const container = document.getElementById('commentsContainer');
@@ -5224,38 +5286,139 @@
             document.getElementById('commentForm').style.display = 'block';
             alert('Error: ' + error.message);
           })
-          .addCommentToPost(postId, commentText, commentType);
+          .addCommentToPost(postId, commentText, commentType, notifyEmail);
       }
 
       // Show approval dashboard
       function showApprovalDashboard() {
-        // Open ApprovalDashboard.html in a modal iframe
         const modal = document.createElement('div');
         modal.id = 'approvalDashboardModal';
         modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;';
 
         const modalContent = document.createElement('div');
-        modalContent.style.cssText = 'background: white; width: 90%; max-width: 1200px; height: 90%; border-radius: 8px; position: relative; display: flex; flex-direction: column;';
+        modalContent.style.cssText = 'background: white; width: 90%; max-width: 1200px; height: 90%; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;';
 
         const modalHeader = document.createElement('div');
-        modalHeader.style.cssText = 'padding: 20px; border-bottom: 1px solid #dadce0; display: flex; justify-content: space-between; align-items: center;';
+        modalHeader.style.cssText = 'padding: 20px; border-bottom: 1px solid #dadce0; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;';
         modalHeader.innerHTML = '<h2 style="margin: 0; color: #1a73e8;">📋 My Pending Approvals</h2><button onclick="closeApprovalDashboard()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #5f6368;">&times;</button>';
 
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'width: 100%; height: 100%; border: none; flex: 1;';
-        iframe.src = '<?= ScriptApp.getService().getUrl() ?>?page=approvals';
+        const modalBody = document.createElement('div');
+        modalBody.id = 'approvalDashboardBody';
+        modalBody.style.cssText = 'padding: 20px; overflow-y: auto; flex: 1;';
+        modalBody.innerHTML = '<p style="color: #5f6368; text-align: center; padding: 40px 0;">Loading your pending approvals...</p>';
 
         modalContent.appendChild(modalHeader);
-        modalContent.appendChild(iframe);
+        modalContent.appendChild(modalBody);
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
 
-        // Close on background click
         modal.addEventListener('click', function(e) {
-          if (e.target === modal) {
-            closeApprovalDashboard();
-          }
+          if (e.target === modal) closeApprovalDashboard();
         });
+
+        // Load directly using google.script.run (iframe approach doesn't work in GAS)
+        google.script.run
+          .withSuccessHandler(renderApprovalCards)
+          .withFailureHandler(function(error) {
+            const body = document.getElementById('approvalDashboardBody');
+            if (body) body.innerHTML = '<p style="color: #ea4335; text-align: center;">⚠️ Error loading approvals: ' + error.message + '</p>';
+          })
+          .getMyPendingApprovals();
+      }
+
+      function renderApprovalCards(approvals) {
+        const body = document.getElementById('approvalDashboardBody');
+        if (!body) return;
+
+        if (!approvals || approvals.length === 0) {
+          body.innerHTML = '<div style="text-align: center; padding: 60px 20px;"><div style="font-size: 48px;">✅</div><h2 style="color: #34a853;">All caught up!</h2><p style="color: #5f6368;">You have no pending approvals at this time.</p></div>';
+          return;
+        }
+
+        let html = '';
+        approvals.forEach(function(approval) {
+          const stageLabel = approval.Approval_Stage === 'Internal' ? 'Internal Review' : 'Client Review';
+          const stageColor = approval.Approval_Stage === 'Internal' ? '#f9ab00' : '#ea4335';
+          const dateStr = approval.Post_Scheduled_Date ? new Date(approval.Post_Scheduled_Date).toLocaleDateString() : 'N/A';
+          html += '<div style="border: 1px solid #dadce0; border-radius: 8px; padding: 20px; margin-bottom: 16px;">';
+          html += '<div style="display: inline-block; padding: 4px 12px; border-radius: 12px; background: ' + stageColor + '; color: white; font-size: 12px; font-weight: 600; margin-bottom: 12px;">' + stageLabel + '</div>';
+          html += '<div style="font-size: 18px; font-weight: 600; color: #202124; margin-bottom: 8px;">' + escapeHtml(approval.Post_Title || 'Untitled Post') + '</div>';
+          html += '<div style="font-size: 13px; color: #5f6368; margin-bottom: 12px;"><strong>Client:</strong> ' + escapeHtml(approval.Client_Name || 'N/A') + ' | <strong>Scheduled:</strong> ' + dateStr + ' | <strong>Post ID:</strong> ' + approval.Post_ID + '</div>';
+          html += '<div style="background: #f8f9fa; padding: 12px; border-radius: 4px; margin-bottom: 16px; white-space: pre-wrap; font-size: 14px;">' + escapeHtml(approval.Post_Copy || 'No content available') + '</div>';
+          html += '<button onclick="openPostDetail(\'' + approval.Post_ID + '\')" style="background: #1a73e8; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 12px;">📄 View Full Post</button><br>';
+          html += '<textarea id="approval-comment-' + approval.ID + '" style="width: 100%; min-height: 80px; padding: 8px; border: 1px solid #dadce0; border-radius: 4px; font-size: 14px; box-sizing: border-box; margin-bottom: 12px;" placeholder="Add comments (optional for approval, recommended for changes)..."></textarea>';
+          html += '<div>';
+          html += '<button onclick="submitApprovalFromModal(\'' + approval.ID + '\', \'Approved\')" style="background: #34a853; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600; margin-right: 8px;">✓ Approve</button>';
+          html += '<button onclick="submitApprovalFromModal(\'' + approval.ID + '\', \'Changes_Requested\')" style="background: #ea4335; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: 600;">✗ Request Changes</button>';
+          html += '</div></div>';
+        });
+        body.innerHTML = html;
+      }
+
+      function submitApprovalFromModal(approvalId, decision) {
+        const comments = document.getElementById('approval-comment-' + approvalId).value;
+        if (decision === 'Changes_Requested' && !comments.trim()) {
+          alert('Please provide comments explaining what changes are needed.');
+          return;
+        }
+        if (!confirm('Are you sure you want to ' + (decision === 'Approved' ? 'approve' : 'request changes for') + ' this post?')) return;
+
+        const body = document.getElementById('approvalDashboardBody');
+        body.innerHTML = '<p style="color: #5f6368; text-align: center; padding: 40px 0;">Submitting decision...</p>';
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result && result.success) {
+              body.innerHTML = '<p style="color: #5f6368; text-align: center; padding: 40px 0;">Loading your pending approvals...</p>';
+              google.script.run
+                .withSuccessHandler(function(approvals) {
+                  renderApprovalCards(approvals);
+                  loadApprovalCount(); // refresh badge
+                })
+                .withFailureHandler(function(error) {
+                  body.innerHTML = '<p style="color: #ea4335;">⚠️ Error: ' + error.message + '</p>';
+                })
+                .getMyPendingApprovals();
+            } else {
+              body.innerHTML = '<p style="color: #ea4335; text-align: center;">⚠️ Error: ' + (result ? result.error : 'Unknown error') + '</p>';
+            }
+          })
+          .withFailureHandler(function(error) {
+            body.innerHTML = '<p style="color: #ea4335; text-align: center;">⚠️ Error submitting: ' + error.message + '</p>';
+          })
+          .submitApprovalDecision(approvalId, decision, comments);
+      }
+
+      function approveFromPostDetail(approvalId, postId, decision) {
+        const comments = document.getElementById('postDetailApprovalComment').value;
+        if (decision === 'Changes_Requested' && !comments.trim()) {
+          alert('Please provide comments explaining what changes are needed.');
+          return;
+        }
+        if (!confirm('Are you sure you want to ' + (decision === 'Approved' ? 'approve' : 'request changes for') + ' this post?')) return;
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            if (result && result.success) {
+              openPostDetail(postId);   // refresh post detail
+              loadApprovalCount();      // refresh badge
+              // If approvals modal is open, refresh it too
+              const body = document.getElementById('approvalDashboardBody');
+              if (body) {
+                body.innerHTML = '<p style="color: #5f6368; text-align: center; padding: 40px 0;">Loading your pending approvals...</p>';
+                google.script.run
+                  .withSuccessHandler(renderApprovalCards)
+                  .withFailureHandler(function() {})
+                  .getMyPendingApprovals();
+              }
+            } else {
+              alert('Error: ' + (result ? result.error : 'Unknown error'));
+            }
+          })
+          .withFailureHandler(function(error) {
+            alert('Error submitting decision: ' + error.message);
+          })
+          .submitApprovalDecision(approvalId, decision, comments);
       }
 
       function closeApprovalDashboard() {
